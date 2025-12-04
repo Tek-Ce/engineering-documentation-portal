@@ -90,13 +90,12 @@ async def upload_document(
     # Add tags if provided
     if tags:
         from app.models.tag import DocumentTag
-        import uuid as uuid_lib
         tag_ids = [t.strip() for t in tags.split(',') if t.strip()]
         for tag_id in tag_ids:
             doc_tag = DocumentTag(
-                id=str(uuid_lib.uuid4()),
                 document_id=str(document.id),
-                tag_id=tag_id
+                tag_id=tag_id,
+                tagged_by=str(current_user.id)
             )
             db.add(doc_tag)
 
