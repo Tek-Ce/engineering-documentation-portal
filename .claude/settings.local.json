@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(source:*)",
+      "Bash(python3:*)",
+      "Bash(uvicorn:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)",
+      "Bash(curl:*)",
+      "Bash(find:*)",
+      "Bash(npm update:*)",
+      "Bash(npm run lint)",
+      "Bash(npm run build:*)",
+      "Bash(xargs:*)",
+      "Bash(npm run dev:*)",
+      "Bash(pip install:*)",
+      "Bash(chmod:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

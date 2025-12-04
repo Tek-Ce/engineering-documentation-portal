@@ -1,0 +1,48 @@
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+*.env
+
+# Logs
+*.log
+logs/
+
+# Backup files
+*.bak
+*.backup
+
+# Archives and compressed files
+*.tar
+*.tar.gz
+*.tar.xz
+*.zip
+*.rar
+
+# Database dumps
+*.sql
+
+# Documents (keep in docs/ but ignore in root)
+/*.pdf
+/*.docx
+/*.doc
+
+# Old/legacy directories
+frontend/
