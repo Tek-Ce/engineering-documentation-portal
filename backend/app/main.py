@@ -1,6 +1,5 @@
 # ============================================
-# FILE: app/main.py (PRODUCTION READY)
-# Serves both API and React SPA frontend
+# FILE: app/main.py # Serves both API and React SPA frontend
 # ============================================
 
 from fastapi import FastAPI, Request
