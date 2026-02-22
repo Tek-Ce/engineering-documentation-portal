@@ -190,9 +190,8 @@ function Login() {
           <div className="mt-8 p-4 bg-surface-50 rounded-xl border border-surface-200">
             <p className="text-sm font-medium text-surface-700 mb-2">Demo Credentials</p>
             <div className="text-sm text-surface-500 font-mono space-y-1">
-              <p>admin@example.com / admin123</p>
-              <p>engineer@example.com / eng123</p>
-            </div>
+              <p>xxxx.yyy@outlook.com / 123,..</p>
+           </div>
           </div>
         </div>
       </div>

@@ -2,7 +2,7 @@
 # FILE: app/api/v1/documents.py (FIXED)
 # ============================================
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request, Query, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from pathlib import Path
@@ -18,13 +18,54 @@ from app.services.file_service import FileService
 from app.services.notification_service import NotificationService
 from app.services.activity_service import ActivityService
 from app.utils.helpers import get_client_ip
+from app.crud.kb import crud_kb_job, crud_kb_chunk
+from app.services.indexer_service import IndexerService
 
 router = APIRouter()
 
 
+# Background task for document indexing
+async def _index_document_background(document_id: str, document_title: str, force_reindex: bool = False):
+    """
+    Background task to index a document for KB search.
+    Runs after the HTTP response is sent so uploads feel fast.
+    """
+    from app.db.database import AsyncSessionLocal
+    from sqlalchemy import select
+    from app.models.document import Document
+
+    try:
+        async with AsyncSessionLocal() as db:
+            # Fetch fresh document
+            stmt = select(Document).where(Document.id == document_id)
+            result = await db.execute(stmt)
+            document = result.scalar_one_or_none()
+
+            if not document:
+                print(f"[KB Background] Document {document_id} not found for indexing")
+                return
+
+            # Index the document
+            indexing_result = await IndexerService.index_document(
+                db=db,
+                document=document,
+                force_reindex=force_reindex
+            )
+
+            if indexing_result.get("success"):
+                await db.commit()
+                print(f"[KB Background] Indexed: {document_title} ({indexing_result.get('chunks_created', 0)} chunks)")
+            else:
+                print(f"[KB Background] Warning: {document_title} - {indexing_result.get('error', 'Unknown error')}")
+
+    except Exception as e:
+        print(f"[KB Background] Failed to index {document_title}: {e}")
+
+
 @router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
-    request: Request,  # Fixed: Request is required, not optional
+    request: Request,
+    background_tasks: BackgroundTasks,
     project_id: str = Form(...),
     title: str = Form(...),
     description: Optional[str] = Form(None),
@@ -139,9 +180,59 @@ async def upload_document(
 
     await db.commit()
 
+    # Index document for KB search in background (fast upload, indexing happens after response)
+    background_tasks.add_task(
+        _index_document_background,
+        document_id=str(document.id),
+        document_title=document.title,
+        force_reindex=False
+    )
+
     # Re-fetch with eager loading for tags and reviewers
     document = await crud_document.get(db, id=document.id)
     return DocumentResponse.model_validate(document)
+
+
+@router.get("/recently-viewed", response_model=List[DocumentResponse])
+async def get_recently_viewed(
+    limit: int = Query(10, ge=1, le=20),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get the current user's recently viewed documents"""
+    from app.models.activity_log import ActivityLog
+    from sqlalchemy import select, distinct
+
+    # Get recent DOCUMENT_VIEWED activity for this user, most recent first
+    stmt = (
+        select(ActivityLog)
+        .where(
+            ActivityLog.user_id == str(current_user.id),
+            ActivityLog.action == "DOCUMENT_VIEWED",
+            ActivityLog.resource_type == "document"
+        )
+        .order_by(ActivityLog.created_at.desc())
+        .limit(limit * 3)  # over-fetch to deduplicate
+    )
+    result = await db.execute(stmt)
+    logs = result.scalars().all()
+
+    # Deduplicate document IDs while preserving order
+    seen_ids = []
+    for log in logs:
+        if log.resource_id and log.resource_id not in seen_ids:
+            seen_ids.append(log.resource_id)
+        if len(seen_ids) >= limit:
+            break
+
+    # Fetch document objects
+    documents = []
+    for doc_id in seen_ids:
+        doc = await crud_document.get(db, id=doc_id)
+        if doc:
+            documents.append(doc)
+
+    return [DocumentResponse.model_validate(d) for d in documents]
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)
@@ -161,6 +252,21 @@ async def get_document(
 
     # Check project access
     await check_project_access(document.project_id, current_user=current_user, db=db)
+
+    # Track view in activity log
+    try:
+        await ActivityService.log_activity(
+            db,
+            user_id=str(current_user.id),
+            action="DOCUMENT_VIEWED",
+            resource_type="document",
+            resource_id=str(document.id),
+            description=f"Viewed document: {document.title}",
+            project_id=document.project_id,
+        )
+        await db.commit()
+    except Exception:
+        pass  # Non-critical — don't fail if tracking fails
 
     return DocumentResponse.model_validate(document)
 
@@ -217,20 +323,24 @@ async def update_document(
 async def list_project_documents(
     project_id: str,
     status: Optional[str] = Query(None),
+    document_type: Optional[str] = Query(None),
+    uploaded_by: Optional[str] = Query(None, description="Filter by author user ID"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get all documents for a project"""
+    """Get all documents for a project with optional filters (status, type, author)"""
     # Check project access
     await check_project_access(project_id, current_user=current_user, db=db)
 
-    # Get documents
+    # Get documents with filters
     documents, total = await crud_document.get_project_documents(
         db,
         project_id=project_id,
         status=status,
+        document_type=document_type,
+        uploaded_by=uploaded_by,
         skip=skip,
         limit=limit
     )
@@ -241,6 +351,7 @@ async def list_project_documents(
 @router.post("/{document_id}/upload-new-version", response_model=DocumentResponse)
 async def upload_new_version(
     request: Request,
+    background_tasks: BackgroundTasks,
     document_id: str,
     file: UploadFile = File(...),
     change_notes: Optional[str] = Form(None),
@@ -305,6 +416,15 @@ async def upload_new_version(
 
     await db.commit()
     await db.refresh(document)
+
+    # Re-index document for KB search in background (new version = new content)
+    background_tasks.add_task(
+        _index_document_background,
+        document_id=str(document.id),
+        document_title=document.title,
+        force_reindex=True  # Force re-index since content changed
+    )
+
     return DocumentResponse.model_validate(document)
 
 
@@ -396,3 +516,331 @@ async def download_document(
         media_type=media_type,
         headers=headers if headers else None
     )
+
+
+@router.post("/{document_id}/submit-review", response_model=DocumentResponse)
+async def submit_for_review(
+    request: Request,
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Submit a document for review — changes status to 'review' and notifies reviewers"""
+    document = await crud_document.get(db, id=document_id)
+    if not document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    await check_project_access(document.project_id, current_user=current_user, db=db)
+
+    if document.status not in ("draft", "review"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot submit for review — current status is '{document.status}'"
+        )
+
+    document.status = DocumentStatus.REVIEW.value  # type: ignore
+    db.add(document)
+
+    await ActivityService.log_activity(
+        db,
+        user_id=str(current_user.id),
+        action="DOCUMENT_SUBMITTED_FOR_REVIEW",
+        resource_type="document",
+        resource_id=str(document.id),
+        description=f"Submitted '{document.title}' for review",
+        project_id=document.project_id,
+    )
+
+    # Notify assigned reviewers
+    reviewer_ids = [str(r.id) for r in document.reviewers]
+    if reviewer_ids:
+        await NotificationService.notify_multiple_users(
+            db=db,
+            user_ids=reviewer_ids,
+            message=f"{current_user.full_name} submitted '{document.title}' for your review",
+            notification_type="DOCUMENT_REVIEW_REQUESTED",
+            project_id=document.project_id,
+            document_id=str(document.id),
+            exclude_user_id=str(current_user.id),
+        )
+    else:
+        # Notify project owners if no reviewers assigned
+        await NotificationService.notify_project_members(
+            db=db,
+            project_id=document.project_id,
+            message=f"{current_user.full_name} submitted '{document.title}' for review",
+            notification_type="DOCUMENT_REVIEW_REQUESTED",
+            document_id=str(document.id),
+            exclude_user_id=str(current_user.id),
+        )
+
+    await db.commit()
+    await db.refresh(document)
+    return DocumentResponse.model_validate(document)
+
+
+@router.post("/{document_id}/approve", response_model=DocumentResponse)
+async def approve_document(
+    request: Request,
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Approve a document — only assigned reviewers or admins can approve"""
+    document = await crud_document.get(db, id=document_id)
+    if not document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    await check_project_access(document.project_id, current_user=current_user, db=db)
+
+    # Only reviewers or admins can approve
+    reviewer_ids = [str(r.id) for r in document.reviewers]
+    is_admin = current_user.role == "ADMIN"
+    is_reviewer = str(current_user.id) in reviewer_ids
+    if not is_admin and not is_reviewer:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only assigned reviewers or admins can approve this document"
+        )
+
+    if document.status != "review":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Document must be in 'review' status to approve (current: '{document.status}')"
+        )
+
+    document.status = DocumentStatus.APPROVED.value  # type: ignore
+    db.add(document)
+
+    await ActivityService.log_activity(
+        db,
+        user_id=str(current_user.id),
+        action="DOCUMENT_APPROVED",
+        resource_type="document",
+        resource_id=str(document.id),
+        description=f"Approved document: {document.title}",
+        project_id=document.project_id,
+    )
+
+    # Notify the uploader
+    if document.uploaded_by and document.uploaded_by != str(current_user.id):
+        await NotificationService.notify_user(
+            db=db,
+            user_id=str(document.uploaded_by),
+            message=f"{current_user.full_name} approved your document '{document.title}'",
+            notification_type="DOCUMENT_APPROVED",
+            project_id=document.project_id,
+            document_id=str(document.id),
+        )
+
+    await db.commit()
+    await db.refresh(document)
+    return DocumentResponse.model_validate(document)
+
+
+@router.post("/{document_id}/reject", response_model=DocumentResponse)
+async def reject_document(
+    request: Request,
+    document_id: str,
+    reason: Optional[str] = Query(None, description="Reason for rejection"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Reject a document — sends it back to draft with a rejection reason"""
+    document = await crud_document.get(db, id=document_id)
+    if not document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    await check_project_access(document.project_id, current_user=current_user, db=db)
+
+    reviewer_ids = [str(r.id) for r in document.reviewers]
+    is_admin = current_user.role == "ADMIN"
+    is_reviewer = str(current_user.id) in reviewer_ids
+    if not is_admin and not is_reviewer:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only assigned reviewers or admins can reject this document"
+        )
+
+    if document.status != "review":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Document must be in 'review' status to reject (current: '{document.status}')"
+        )
+
+    document.status = DocumentStatus.DRAFT.value  # type: ignore
+    db.add(document)
+
+    rejection_msg = f"Rejected '{document.title}'" + (f": {reason}" if reason else "")
+    await ActivityService.log_activity(
+        db,
+        user_id=str(current_user.id),
+        action="DOCUMENT_REJECTED",
+        resource_type="document",
+        resource_id=str(document.id),
+        description=rejection_msg,
+        project_id=document.project_id,
+    )
+
+    # Notify the uploader
+    if document.uploaded_by and document.uploaded_by != str(current_user.id):
+        notif_msg = f"{current_user.full_name} rejected your document '{document.title}'"
+        if reason:
+            notif_msg += f" — Reason: {reason}"
+        await NotificationService.notify_user(
+            db=db,
+            user_id=str(document.uploaded_by),
+            message=notif_msg,
+            notification_type="DOCUMENT_REJECTED",
+            project_id=document.project_id,
+            document_id=str(document.id),
+        )
+
+    await db.commit()
+    await db.refresh(document)
+    return DocumentResponse.model_validate(document)
+
+
+@router.get("/pending-review", response_model=List[DocumentResponse])
+async def get_pending_review_documents(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get all documents currently in review status that the user needs to action"""
+    from sqlalchemy import select
+    from app.models.document import Document, document_reviewers as dr_table
+
+    # Find documents in 'review' status where user is a reviewer OR user is admin
+    if current_user.role == "ADMIN":
+        stmt = (
+            select(Document)
+            .where(Document.status == "review")
+            .order_by(Document.updated_at.desc())
+            .limit(20)
+        )
+    else:
+        stmt = (
+            select(Document)
+            .join(dr_table, dr_table.c.document_id == Document.id)
+            .where(
+                Document.status == "review",
+                dr_table.c.user_id == str(current_user.id)
+            )
+            .order_by(Document.updated_at.desc())
+            .limit(20)
+        )
+
+    result = await db.execute(stmt)
+    documents = result.scalars().unique().all()
+    return [DocumentResponse.model_validate(d) for d in documents]
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(
+    request: Request,
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Delete a document
+
+    Allowed for:
+    - Default admin account (created_by IS NULL)
+    - The user who uploaded the document (document owner)
+
+    Raises:
+        403: User is not authorized to delete this document
+        404: Document not found
+    """
+    # Get the document first
+    document = await crud_document.get(db, id=document_id)
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found"
+        )
+
+    # Check project access
+    await check_project_access(document.project_id, current_user=current_user, db=db)
+
+    # Check if user is authorized to delete:
+    # 1. Default admin (created_by IS NULL)
+    # 2. Document owner (uploaded_by matches current user)
+    is_default_admin = current_user.created_by is None
+    is_document_owner = str(document.uploaded_by) == str(current_user.id)
+
+    if not is_default_admin and not is_document_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the document owner or default admin can delete documents"
+        )
+
+    # Store document info for logging before deletion
+    doc_title = document.title
+    doc_project_id = document.project_id
+    file_path = document.file_path
+
+    # Delete KB chunks for this document before deleting the document
+    try:
+        deleted_chunks = await crud_kb_chunk.delete_by_document(db, document_id)
+        if deleted_chunks > 0:
+            print(f"Deleted {deleted_chunks} KB chunks for document {document_id}")
+    except Exception as e:
+        # Log but don't fail the deletion if KB cleanup fails
+        print(f"Warning: Failed to delete KB chunks: {e}")
+
+    # Delete document from database (cascade will handle versions, tags, etc.)
+    await crud_document.remove(db, id=document_id)
+
+    # Delete physical file (and all versions)
+    try:
+        # Delete current file
+        if file_path:
+            full_path = Path("uploads") / file_path
+            if full_path.exists():
+                full_path.unlink()
+
+        # Delete version files
+        from app.models.document import DocumentVersion
+        from sqlalchemy import select
+
+        versions_result = await db.execute(
+            select(DocumentVersion).where(DocumentVersion.document_id == document_id)
+        )
+        versions = versions_result.scalars().all()
+
+        for version in versions:
+            if version.file_path:
+                version_path = Path("uploads") / version.file_path
+                if version_path.exists():
+                    version_path.unlink()
+    except Exception as e:
+        # Log error but don't fail the deletion
+        print(f"Warning: Failed to delete physical files: {e}")
+
+    # Log activity
+    ip = get_client_ip(request)
+    await ActivityService.log_activity(
+        db,
+        user_id=str(current_user.id),
+        action="DOCUMENT_DELETED",
+        resource_type="document",
+        resource_id=document_id,
+        description=f"Deleted document: {doc_title}",
+        project_id=doc_project_id,
+        ip_address=ip
+    )
+
+    # Notify project members
+    await NotificationService.notify_project_members(
+        db=db,
+        project_id=doc_project_id,
+        message=f"{current_user.full_name} deleted document: {doc_title}",
+        notification_type="DOCUMENT_DELETED",
+        exclude_user_id=str(current_user.id)
+    )
+
+    await db.commit()
+
+    return None  # 204 No Content

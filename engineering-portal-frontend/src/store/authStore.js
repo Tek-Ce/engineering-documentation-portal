@@ -39,6 +39,12 @@ export const useAuthStore = create(
         const { user } = get()
         return user?.role === 'ENGINEER' || user?.role === 'ADMIN'
       },
+
+      isDefaultAdmin: () => {
+        const { user } = get()
+        // Default admin is the one with created_by = null
+        return user?.role === 'ADMIN' && user?.created_by === null
+      },
     }),
     {
       name: 'auth-storage',

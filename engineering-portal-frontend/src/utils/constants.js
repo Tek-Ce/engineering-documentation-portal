@@ -119,6 +119,73 @@ export const PAGINATION = {
   PAGE_SIZE_OPTIONS: [10, 25, 50, 100],
 }
 
+// Knowledge Base Job Status
+export const KB_JOB_STATUS = {
+  QUEUED: 'queued',
+  PROCESSING: 'processing',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  CANCELLED: 'cancelled',
+}
+
+export const KB_JOB_STATUS_LABELS = {
+  [KB_JOB_STATUS.QUEUED]: 'Queued',
+  [KB_JOB_STATUS.PROCESSING]: 'Processing',
+  [KB_JOB_STATUS.COMPLETED]: 'Completed',
+  [KB_JOB_STATUS.FAILED]: 'Failed',
+  [KB_JOB_STATUS.CANCELLED]: 'Cancelled',
+}
+
+export const KB_JOB_STATUS_COLORS = {
+  [KB_JOB_STATUS.QUEUED]: {
+    bg: 'bg-surface-100',
+    text: 'text-surface-600',
+    dot: 'bg-surface-400',
+  },
+  [KB_JOB_STATUS.PROCESSING]: {
+    bg: 'bg-primary-100',
+    text: 'text-primary-600',
+    dot: 'bg-primary-500',
+  },
+  [KB_JOB_STATUS.COMPLETED]: {
+    bg: 'bg-green-100',
+    text: 'text-accent-green',
+    dot: 'bg-accent-green',
+  },
+  [KB_JOB_STATUS.FAILED]: {
+    bg: 'bg-red-100',
+    text: 'text-accent-red',
+    dot: 'bg-accent-red',
+  },
+  [KB_JOB_STATUS.CANCELLED]: {
+    bg: 'bg-amber-100',
+    text: 'text-accent-amber',
+    dot: 'bg-accent-amber',
+  },
+}
+
+// Knowledge Base Job Types
+export const KB_JOB_TYPE = {
+  INDEX_DOCUMENT: 'index_document',
+  REINDEX_PROJECT: 'reindex_project',
+  DELETE_INDEX: 'delete_index',
+  GENERATE_SUMMARY: 'generate_summary',
+}
+
+export const KB_JOB_TYPE_LABELS = {
+  [KB_JOB_TYPE.INDEX_DOCUMENT]: 'Index Document',
+  [KB_JOB_TYPE.REINDEX_PROJECT]: 'Reindex Project',
+  [KB_JOB_TYPE.DELETE_INDEX]: 'Delete Index',
+  [KB_JOB_TYPE.GENERATE_SUMMARY]: 'Generate Summary',
+}
+
+// Knowledge Base Source Types
+export const KB_SOURCE_TYPE = {
+  DOCUMENT: 'document',
+  COMMENT: 'comment',
+  PROJECT: 'project',
+}
+
 // API endpoints (for reference)
 export const API_ENDPOINTS = {
   AUTH: {

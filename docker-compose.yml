@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: engportal-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: engportal
+      MYSQL_USER: enguser
+      MYSQL_PASSWORD: engpassword
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - engportal-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: engportal-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "mysql://enguser:engpassword@mysql:3306/engportal"
+      SECRET_KEY: "your-super-secret-key-change-this-in-production"
+      ALGORITHM: "HS256"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+      DEBUG: "True"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/uploads:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - engportal-network
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./engineering-portal-frontend
+      dockerfile: Dockerfile
+    container_name: engportal-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - engportal-network
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  engportal-network:
+    driver: bridge

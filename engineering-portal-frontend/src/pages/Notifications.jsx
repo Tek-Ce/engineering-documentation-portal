@@ -20,7 +20,7 @@ import { formatDistanceToNow, format } from 'date-fns'
 import clsx from 'clsx'
 
 // Notification Item
-function NotificationItem({ notification, onMarkRead, onDelete }) {
+function NotificationItem({ notification, onMarkRead, onDelete, onOpen }) {
   const typeConfig = {
     DOCUMENT_UPLOAD: { 
       icon: Upload, 
@@ -66,6 +66,13 @@ function NotificationItem({ notification, onMarkRead, onDelete }) {
   const link = getLink()
   const ContentWrapper = link ? Link : 'div'
 
+  // Auto-mark as read when notification is clicked/opened
+  const handleClick = () => {
+    if (!notification.is_read && link) {
+      onOpen(notification.id)
+    }
+  }
+
   return (
     <div
       className={clsx(
@@ -81,10 +88,10 @@ function NotificationItem({ notification, onMarkRead, onDelete }) {
       )}>
         <Icon size={18} className="text-white" />
       </div>
-      
+
       <ContentWrapper
-        {...(link ? { to: link } : {})}
-        className="flex-1 min-w-0"
+        {...(link ? { to: link, onClick: handleClick } : {})}
+        className="flex-1 min-w-0 cursor-pointer"
       >
         <div className="flex items-center gap-2 mb-1">
           <span className={clsx(
@@ -290,6 +297,7 @@ function Notifications() {
               notification={notification}
               onMarkRead={(id) => markReadMutation.mutate(id)}
               onDelete={(id) => deleteMutation.mutate(id)}
+              onOpen={(id) => markReadMutation.mutate(id)}
             />
           ))}
         </div>

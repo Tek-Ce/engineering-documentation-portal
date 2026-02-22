@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore'
 import { useNavigate } from 'react-router-dom'
 import { tagsAPI, projectsAPI, usersAPI, adminAPI } from '../api/client'
 import toast from 'react-hot-toast'
+import { formatDistanceToNow } from 'date-fns'
 import {
   Settings,
   Tag,
@@ -15,7 +16,14 @@ import {
   Users,
   FolderKanban,
   Shield,
-  AlertTriangle
+  AlertTriangle,
+  Activity,
+  Circle,
+  Clock,
+  Filter,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 
 function AdminSettings() {
@@ -26,6 +34,10 @@ function AdminSettings() {
   const [isCreating, setIsCreating] = useState(false)
   const [editingTag, setEditingTag] = useState(null)
   const [newTag, setNewTag] = useState({ name: '', color: '#3B82F6' })
+
+  // Activity logs state
+  const [logsPage, setLogsPage] = useState(0)
+  const [logsFilter, setLogsFilter] = useState({ action: '', user_id: '' })
 
   // Check if user is admin
   if (user?.role !== 'ADMIN') {
@@ -51,6 +63,33 @@ function AdminSettings() {
     queryKey: ['all-projects-admin'],
     queryFn: () => projectsAPI.list({ limit: 1000 }),
     enabled: activeTab === 'projects',
+  })
+
+  // Fetch activity logs (admin only)
+  const { data: activityLogsData, isLoading: logsLoading, refetch: refetchLogs } = useQuery({
+    queryKey: ['activity-logs', logsPage, logsFilter],
+    queryFn: () => adminAPI.getActivityLogs({
+      skip: logsPage * 50,
+      limit: 50,
+      ...(logsFilter.action && { action: logsFilter.action }),
+      ...(logsFilter.user_id && { user_id: logsFilter.user_id })
+    }),
+    enabled: activeTab === 'activity',
+  })
+
+  // Fetch activity stats (admin only)
+  const { data: activityStats } = useQuery({
+    queryKey: ['activity-stats'],
+    queryFn: () => adminAPI.getActivityStats(30),
+    enabled: activeTab === 'activity',
+  })
+
+  // Fetch users with online status
+  const { data: usersStatusData, isLoading: usersStatusLoading, refetch: refetchUsersStatus } = useQuery({
+    queryKey: ['users-status'],
+    queryFn: () => adminAPI.getUsersWithStatus({ limit: 200 }),
+    enabled: activeTab === 'online',
+    refetchInterval: 30000, // Refresh every 30 seconds
   })
 
   // Create tag mutation
@@ -154,9 +193,11 @@ function AdminSettings() {
   }
 
   const tabs = [
-    { id: 'tags', label: 'Tags Management', icon: Tag },
-    { id: 'users', label: 'Users Management', icon: Users },
-    { id: 'projects', label: 'Projects Overview', icon: FolderKanban },
+    { id: 'tags', label: 'Tags', icon: Tag },
+    { id: 'users', label: 'Users', icon: Users },
+    { id: 'online', label: 'Online Status', icon: Circle },
+    { id: 'activity', label: 'Activity Logs', icon: Activity },
+    { id: 'projects', label: 'Projects', icon: FolderKanban },
     { id: 'danger', label: 'Danger Zone', icon: AlertTriangle },
   ]
 
@@ -411,6 +452,282 @@ function AdminSettings() {
                     </tbody>
                   </table>
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* Projects Overview */}
+          {/* Online Status Tab */}
+          {activeTab === 'online' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-surface-900">User Online Status</h2>
+                  <p className="text-sm text-surface-500 mt-1">
+                    See which users are currently active in the system
+                  </p>
+                </div>
+                <button
+                  onClick={() => refetchUsersStatus()}
+                  className="flex items-center gap-2 px-3 py-2 text-sm bg-surface-100 text-surface-700 rounded-lg hover:bg-surface-200 transition-colors"
+                >
+                  <RefreshCw size={16} />
+                  Refresh
+                </button>
+              </div>
+
+              {/* Online Summary */}
+              {usersStatusData && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <Circle size={12} className="fill-green-500 text-green-500" />
+                      <span className="text-2xl font-bold text-green-700">{usersStatusData.online_count}</span>
+                    </div>
+                    <p className="text-sm text-green-600">Online Now</p>
+                  </div>
+                  <div className="bg-surface-50 border border-surface-200 rounded-lg p-4 text-center">
+                    <span className="text-2xl font-bold text-surface-700">{usersStatusData.total}</span>
+                    <p className="text-sm text-surface-500">Total Users</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Users List */}
+              {usersStatusLoading ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-surface-200">
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-surface-700">Status</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-surface-700">User</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-surface-700">Email</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-surface-700">Role</th>
+                        <th className="text-left py-3 px-4 text-sm font-semibold text-surface-700">Last Activity</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {usersStatusData?.users?.map((u) => (
+                        <tr key={u.id} className="border-b border-surface-100 hover:bg-surface-50">
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <Circle
+                                size={10}
+                                className={u.is_online ? 'fill-green-500 text-green-500' : 'fill-surface-300 text-surface-300'}
+                              />
+                              <span className={`text-xs font-medium ${u.is_online ? 'text-green-600' : 'text-surface-500'}`}>
+                                {u.is_online ? 'Online' : 'Offline'}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${
+                                u.is_online ? 'bg-gradient-to-br from-green-500 to-green-700' : 'bg-gradient-to-br from-surface-400 to-surface-600'
+                              }`}>
+                                {u.full_name?.split(' ').map(n => n[0]).join('').toUpperCase() || '?'}
+                              </div>
+                              <span className="font-medium text-surface-900">{u.full_name}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-surface-600">{u.email}</td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                              u.role === 'ADMIN'
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'bg-surface-100 text-surface-700'
+                            }`}>
+                              {u.role === 'ADMIN' && <Shield size={12} className="inline mr-1" />}
+                              {u.role}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-surface-600 text-sm">
+                            {u.last_activity ? (
+                              <span className="flex items-center gap-1.5">
+                                <Clock size={14} className="text-surface-400" />
+                                {formatDistanceToNow(new Date(u.last_activity), { addSuffix: true })}
+                              </span>
+                            ) : (
+                              <span className="text-surface-400">Never</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Activity Logs Tab */}
+          {activeTab === 'activity' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-surface-900">Activity Logs</h2>
+                  <p className="text-sm text-surface-500 mt-1">
+                    Track all user activities in the system
+                  </p>
+                </div>
+                <button
+                  onClick={() => refetchLogs()}
+                  className="flex items-center gap-2 px-3 py-2 text-sm bg-surface-100 text-surface-700 rounded-lg hover:bg-surface-200 transition-colors"
+                >
+                  <RefreshCw size={16} />
+                  Refresh
+                </button>
+              </div>
+
+              {/* Stats Summary */}
+              {activityStats && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 text-center">
+                    <span className="text-2xl font-bold text-primary-700">{activityStats.total_logs}</span>
+                    <p className="text-sm text-primary-600">Total Logs</p>
+                  </div>
+                  <div className="bg-surface-50 border border-surface-200 rounded-lg p-4 text-center">
+                    <span className="text-2xl font-bold text-surface-700">{activityStats.actions?.length || 0}</span>
+                    <p className="text-sm text-surface-500">Action Types</p>
+                  </div>
+                  <div className="bg-surface-50 border border-surface-200 rounded-lg p-4 text-center">
+                    <span className="text-2xl font-bold text-surface-700">{activityStats.user_stats?.length || 0}</span>
+                    <p className="text-sm text-surface-500">Active Users (30d)</p>
+                  </div>
+                  <div className="bg-surface-50 border border-surface-200 rounded-lg p-4 text-center">
+                    <span className="text-2xl font-bold text-surface-700">{activityStats.resource_types?.length || 0}</span>
+                    <p className="text-sm text-surface-500">Resource Types</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Filters */}
+              <div className="flex flex-wrap gap-3 items-center bg-surface-50 p-4 rounded-lg">
+                <Filter size={18} className="text-surface-500" />
+                <select
+                  value={logsFilter.action}
+                  onChange={(e) => {
+                    setLogsFilter({ ...logsFilter, action: e.target.value })
+                    setLogsPage(0)
+                  }}
+                  className="px-3 py-2 border border-surface-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">All Actions</option>
+                  {activityStats?.actions?.map((action) => (
+                    <option key={action} value={action}>{action}</option>
+                  ))}
+                </select>
+                {logsFilter.action && (
+                  <button
+                    onClick={() => {
+                      setLogsFilter({ action: '', user_id: '' })
+                      setLogsPage(0)
+                    }}
+                    className="px-3 py-2 text-sm text-surface-600 hover:text-surface-900"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+              </div>
+
+              {/* Logs Table */}
+              {logsLoading ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+                </div>
+              ) : activityLogsData?.logs?.length === 0 ? (
+                <div className="text-center py-12 bg-surface-50 rounded-lg">
+                  <Activity className="mx-auto text-surface-300 mb-3" size={48} />
+                  <p className="text-surface-500">No activity logs found</p>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-surface-200">
+                          <th className="text-left py-3 px-4 text-sm font-semibold text-surface-700">Time</th>
+                          <th className="text-left py-3 px-4 text-sm font-semibold text-surface-700">User</th>
+                          <th className="text-left py-3 px-4 text-sm font-semibold text-surface-700">Action</th>
+                          <th className="text-left py-3 px-4 text-sm font-semibold text-surface-700">Resource</th>
+                          <th className="text-left py-3 px-4 text-sm font-semibold text-surface-700">Description</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activityLogsData?.logs?.map((log) => (
+                          <tr key={log.id} className="border-b border-surface-100 hover:bg-surface-50">
+                            <td className="py-3 px-4 text-sm text-surface-600">
+                              <span className="flex items-center gap-1.5">
+                                <Clock size={14} className="text-surface-400" />
+                                {log.created_at ? formatDistanceToNow(new Date(log.created_at), { addSuffix: true }) : '-'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white text-xs font-bold">
+                                  {log.user_name?.split(' ').map(n => n[0]).join('').toUpperCase() || '?'}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-surface-900">{log.user_name || 'Unknown'}</p>
+                                  <p className="text-xs text-surface-500">{log.user_email}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-700">
+                                {log.action}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              {log.resource_type ? (
+                                <span className="text-sm text-surface-600">
+                                  {log.resource_type}
+                                  {log.project_name && (
+                                    <span className="text-surface-400 ml-1">({log.project_name})</span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="text-surface-400">-</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-sm text-surface-600 max-w-xs truncate">
+                              {log.description || '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  <div className="flex items-center justify-between pt-4 border-t border-surface-200">
+                    <p className="text-sm text-surface-500">
+                      Showing {logsPage * 50 + 1} - {Math.min((logsPage + 1) * 50, activityLogsData?.total || 0)} of {activityLogsData?.total || 0}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setLogsPage(Math.max(0, logsPage - 1))}
+                        disabled={logsPage === 0}
+                        className="flex items-center gap-1 px-3 py-2 text-sm border border-surface-300 rounded-lg hover:bg-surface-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ChevronLeft size={16} />
+                        Previous
+                      </button>
+                      <button
+                        onClick={() => setLogsPage(logsPage + 1)}
+                        disabled={(logsPage + 1) * 50 >= (activityLogsData?.total || 0)}
+                        className="flex items-center gap-1 px-3 py-2 text-sm border border-surface-300 rounded-lg hover:bg-surface-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           )}

@@ -16,6 +16,7 @@ import {
 import { useState, useRef, useEffect } from 'react'
 import { useAuthStore, useUIStore } from '../store/authStore'
 import { notificationsAPI } from '../api/client'
+import { OnlineUsersIndicator } from './OnlineUsersIndicator'
 import clsx from 'clsx'
 
 function Layout() {
@@ -212,6 +213,11 @@ function Layout() {
 
           {/* Right Section */}
           <div className="flex items-center gap-2 lg:gap-4">
+            {/* Online Users Indicator */}
+            <div className="hidden sm:block">
+              <OnlineUsersIndicator />
+            </div>
+
             {/* Notifications */}
             <NavLink
               to="/notifications"

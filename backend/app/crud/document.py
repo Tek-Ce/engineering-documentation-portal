@@ -31,17 +31,23 @@ class CRUDDocument(CRUDBase[Document, DocumentCreate, DocumentUpdate]):
         project_id: str,
         skip: int = 0,
         limit: int = 100,
-        status: Optional[str] = None
+        status: Optional[str] = None,
+        document_type: Optional[str] = None,
+        uploaded_by: Optional[str] = None,
     ) -> tuple[List[Document], int]:
         """Get documents in a project with tags and reviewers eagerly loaded"""
         query = select(Document).where(Document.project_id == project_id).options(
             joinedload(Document.tags).joinedload(DocumentTag.tag),
             joinedload(Document.reviewers)
         )
-        
+
         if status:
             query = query.where(Document.status == status)
-        
+        if document_type:
+            query = query.where(Document.document_type == document_type)
+        if uploaded_by:
+            query = query.where(Document.uploaded_by == uploaded_by)
+
         # Get total count
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await db.execute(count_query)

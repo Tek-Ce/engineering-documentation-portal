@@ -1,10 +1,60 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, memo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { commentsAPI, documentsAPI } from '../api/client'
 import { toast } from 'react-hot-toast'
 import { MessageSquare, Send, Check, X, Trash2, Edit2, AtSign } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import MentionTextarea from './MentionTextarea'
+
+// Extracted reply form component to prevent re-mounting on parent state changes
+const ReplyForm = memo(function ReplyForm({
+  commentId,
+  projectId,
+  onSubmit,
+  onCancel,
+  isPending
+}) {
+  const [replyContent, setReplyContent] = useState('')
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (!replyContent.trim()) return
+    onSubmit(replyContent, commentId)
+    setReplyContent('')
+  }
+
+  return (
+    <div className="ml-6 sm:ml-12 mt-3">
+      <form onSubmit={handleSubmit} className="bg-gray-50 rounded-lg p-3">
+        <MentionTextarea
+          value={replyContent}
+          onChange={(e) => setReplyContent(e.target.value)}
+          placeholder="Write a reply... (use @ to mention someone)"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          rows={2}
+          projectId={projectId}
+        />
+        <div className="flex gap-2 mt-2">
+          <button
+            type="submit"
+            disabled={!replyContent.trim() || isPending}
+            className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Send className="w-4 h-4 mr-2" />
+            Reply
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+})
 
 export default function CommentsSection({ documentId }) {
   // Fetch document to get project ID
@@ -16,7 +66,7 @@ export default function CommentsSection({ documentId }) {
   // Derive projectId directly from documentData (no useState needed)
   const projectId = documentData?.project_id || null
   const [newComment, setNewComment] = useState('')
-  const [replyTo, setReplyTo] = useState(null)
+  const [replyToId, setReplyToId] = useState(null)
   const [editingComment, setEditingComment] = useState(null)
   const [editContent, setEditContent] = useState('')
   const queryClient = useQueryClient()
@@ -41,7 +91,7 @@ export default function CommentsSection({ documentId }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['comments', documentId] })
       setNewComment('')
-      setReplyTo(null)
+      setReplyToId(null)
       toast.success('Comment added')
     },
     onError: () => {
@@ -95,7 +145,16 @@ export default function CommentsSection({ documentId }) {
     createCommentMutation.mutate({
       document_id: documentId,
       content: newComment,
-      parent_comment_id: replyTo,
+      parent_comment_id: null,
+    })
+  }
+
+  // Handle reply submission from ReplyForm component
+  const handleSubmitReply = (content, parentCommentId) => {
+    createCommentMutation.mutate({
+      document_id: documentId,
+      content: content,
+      parent_comment_id: parentCommentId,
     })
   }
 
@@ -274,7 +333,7 @@ export default function CommentsSection({ documentId }) {
 
           {!isReply && !isEditing && (
             <button
-              onClick={() => setReplyTo(replyTo === comment.id ? null : comment.id)}
+              onClick={() => setReplyToId(replyToId === comment.id ? null : comment.id)}
               className="mt-2 text-sm text-blue-600 hover:text-blue-700"
             >
               Reply
@@ -289,40 +348,15 @@ export default function CommentsSection({ documentId }) {
           </div>
         )}
 
-        {/* Reply form */}
-        {replyTo === comment.id && (
-          <div className="ml-6 sm:ml-12 mt-3">
-            <form onSubmit={handleSubmitComment} className="bg-gray-50 rounded-lg p-3">
-              <MentionTextarea
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Write a reply... (use @ to mention someone)"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                rows={2}
-                projectId={projectId}
-              />
-              <div className="flex gap-2 mt-2">
-                <button
-                  type="submit"
-                  disabled={!newComment.trim() || createCommentMutation.isPending}
-                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Send className="w-4 h-4 mr-2" />
-                  Reply
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setReplyTo(null)
-                    setNewComment('')
-                  }}
-                  className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
+        {/* Reply form - using separate component to maintain focus */}
+        {replyToId === comment.id && (
+          <ReplyForm
+            commentId={comment.id}
+            projectId={projectId}
+            onSubmit={handleSubmitReply}
+            onCancel={() => setReplyToId(null)}
+            isPending={createCommentMutation.isPending}
+          />
         )}
       </div>
     )
@@ -349,7 +383,7 @@ export default function CommentsSection({ documentId }) {
       </h3>
 
       {/* New comment form */}
-      {!replyTo && (
+      {!replyToId && (
         <form onSubmit={handleSubmitComment} className="mb-6">
           <MentionTextarea
             value={newComment}

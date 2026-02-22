@@ -107,7 +107,17 @@ export const projectsAPI = {
     const response = await api.post(`/projects/${id}/archive`)
     return response.data
   },
-  
+
+  restore: async (id) => {
+    const response = await api.post(`/projects/${id}/restore`)
+    return response.data
+  },
+
+  complete: async (id) => {
+    const response = await api.post(`/projects/${id}/complete`)
+    return response.data
+  },
+
   getStats: async (id) => {
     const response = await api.get(`/projects/${id}/stats`)
     return response.data
@@ -162,6 +172,33 @@ export const documentsAPI = {
     return response.data
   },
 
+  recentlyViewed: async (limit = 10) => {
+    const response = await api.get('/documents/recently-viewed', { params: { limit } })
+    return response.data
+  },
+
+  pendingReview: async () => {
+    const response = await api.get('/documents/pending-review')
+    return response.data
+  },
+
+  submitForReview: async (documentId) => {
+    const response = await api.post(`/documents/${documentId}/submit-review`)
+    return response.data
+  },
+
+  approve: async (documentId) => {
+    const response = await api.post(`/documents/${documentId}/approve`)
+    return response.data
+  },
+
+  reject: async (documentId, reason = '') => {
+    const response = await api.post(`/documents/${documentId}/reject`, null, {
+      params: reason ? { reason } : {}
+    })
+    return response.data
+  },
+
   listByProject: async (projectId, params = {}) => {
     const response = await api.get(`/documents/project/${projectId}`, { params })
     return response.data
@@ -203,6 +240,10 @@ export const documentsAPI = {
   update: async (documentId, data) => {
     const response = await api.patch(`/documents/${documentId}`, data)
     return response.data
+  },
+
+  delete: async (documentId) => {
+    await api.delete(`/documents/${documentId}`)
   },
 }
 
@@ -383,6 +424,168 @@ export const searchAPI = {
 export const adminAPI = {
   resetDatabase: async () => {
     const response = await api.post('/admin/reset-database')
+    return response.data
+  },
+
+  // Activity Logs
+  getActivityLogs: async (params = {}) => {
+    const response = await api.get('/admin/activity-logs', { params })
+    return response.data
+  },
+
+  getActivityStats: async (days = 30) => {
+    const response = await api.get('/admin/activity-stats', { params: { days } })
+    return response.data
+  },
+
+  // User Presence
+  getOnlineUsers: async (thresholdMinutes = 5) => {
+    const response = await api.get('/admin/online-users', {
+      params: { threshold_minutes: thresholdMinutes }
+    })
+    return response.data
+  },
+
+  getUsersWithStatus: async (params = {}) => {
+    const response = await api.get('/admin/users-status', { params })
+    return response.data
+  },
+
+  // Heartbeat - call this periodically to update user's online status
+  heartbeat: async () => {
+    const response = await api.post('/admin/heartbeat')
+    return response.data
+  },
+}
+
+// Knowledge Base API
+export const kbAPI = {
+  // Search
+  search: async (query, options = {}) => {
+    const params = {
+      q: query,
+      limit: options.limit || 20,
+      offset: options.offset || 0,
+      use_semantic: options.useSemantic !== false,
+      use_keyword: options.useKeyword !== false,
+    }
+    if (options.projectId) params.project_id = options.projectId
+
+    const response = await api.get('/kb/search', { params })
+    return response.data
+  },
+
+  searchAdvanced: async (request) => {
+    const response = await api.post('/kb/search', request)
+    return response.data
+  },
+
+  // Indexing
+  indexDocument: async (documentId) => {
+    const response = await api.post(`/kb/index/document/${documentId}`)
+    return response.data
+  },
+
+  indexProject: async (projectId, forceReindex = false) => {
+    const response = await api.post(`/kb/index/project/${projectId}`, null, {
+      params: { force_reindex: forceReindex }
+    })
+    return response.data
+  },
+
+  deleteDocumentIndex: async (documentId) => {
+    const response = await api.delete(`/kb/index/document/${documentId}`)
+    return response.data
+  },
+
+  // Status
+  getDocumentStatus: async (documentId) => {
+    const response = await api.get(`/kb/status/document/${documentId}`)
+    return response.data
+  },
+
+  getProjectStatus: async (projectId) => {
+    const response = await api.get(`/kb/status/project/${projectId}`)
+    return response.data
+  },
+
+  getStats: async () => {
+    const response = await api.get('/kb/stats')
+    return response.data
+  },
+
+  // Jobs
+  listJobs: async (params = {}) => {
+    const response = await api.get('/kb/jobs', { params })
+    return response.data
+  },
+
+  getJob: async (jobId) => {
+    const response = await api.get(`/kb/jobs/${jobId}`)
+    return response.data
+  },
+
+  cancelJob: async (jobId) => {
+    const response = await api.post(`/kb/jobs/${jobId}/cancel`)
+    return response.data
+  },
+
+  // Settings
+  getSettings: async (projectId) => {
+    const response = await api.get(`/kb/settings/${projectId}`)
+    return response.data
+  },
+
+  updateSettings: async (projectId, settings) => {
+    const response = await api.put(`/kb/settings/${projectId}`, settings)
+    return response.data
+  },
+
+  // Admin - Crawler
+  triggerCrawlerScan: async () => {
+    const response = await api.post('/kb/crawler/scan')
+    return response.data
+  },
+
+  processPendingJobs: async (maxJobs = 10) => {
+    const response = await api.post('/kb/crawler/process', null, {
+      params: { max_jobs: maxJobs }
+    })
+    return response.data
+  },
+
+  // Index all documents synchronously (admin only)
+  indexAllDocuments: async (forceReindex = false) => {
+    const response = await api.post('/kb/index-all', null, {
+      params: { force_reindex: forceReindex }
+    })
+    return response.data
+  },
+
+  // AI Chat - ask questions about document content
+  chat: async ({
+    message,
+    documentId = null,
+    documentTitle = null,
+    projectName = null,
+    chunkText = null,
+    fileName = null,
+    searchQuery = null,
+    history = null
+  }) => {
+    const response = await api.post('/kb/chat', {
+      message,
+      document_id: documentId,
+      document_title: documentTitle,
+      project_name: projectName,
+      chunk_text: chunkText,
+      file_name: fileName,
+      search_query: searchQuery,
+      history: history?.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }))
+    })
     return response.data
   },
 }

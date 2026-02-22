@@ -143,3 +143,42 @@ export function parseQueryString(queryString) {
   }
   return result
 }
+
+// Sanitize HTML - escapes dangerous content while preserving safe highlight tags
+// This prevents XSS attacks when rendering search result highlights
+export function sanitizeHighlightHtml(html) {
+  if (!html || typeof html !== 'string') return ''
+
+  // First, escape all HTML entities
+  const escaped = html
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+
+  // Then, selectively restore safe highlight tags
+  // Common highlight markers: <mark>, <strong>, <b>, <em>
+  // The server should use these specific tags for highlighting
+  const safeTagPatterns = [
+    // <mark> and </mark>
+    { escaped: '&lt;mark&gt;', safe: '<mark>' },
+    { escaped: '&lt;/mark&gt;', safe: '</mark>' },
+    // <strong> and </strong>
+    { escaped: '&lt;strong&gt;', safe: '<strong>' },
+    { escaped: '&lt;/strong&gt;', safe: '</strong>' },
+    // <b> and </b>
+    { escaped: '&lt;b&gt;', safe: '<b>' },
+    { escaped: '&lt;/b&gt;', safe: '</b>' },
+    // <em> and </em>
+    { escaped: '&lt;em&gt;', safe: '<em>' },
+    { escaped: '&lt;/em&gt;', safe: '</em>' },
+  ]
+
+  let result = escaped
+  for (const pattern of safeTagPatterns) {
+    result = result.split(pattern.escaped).join(pattern.safe)
+  }
+
+  return result
+}

@@ -15,7 +15,11 @@ import {
   ArrowLeft,
   History,
   Eye,
-  Edit3
+  Edit3,
+  Trash2,
+  CheckCircle,
+  XCircle,
+  Send,
 } from 'lucide-react'
 import { documentsAPI } from '../api/client'
 import { useAuthStore } from '../store/authStore'
@@ -250,11 +254,20 @@ function FileContentViewer({ downloadUrl, fileExt }) {
 function DocumentDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const queryClient = useQueryClient()
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false)
   const [isCommentsOpen, setIsCommentsOpen] = useState(false)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
   const [zoomLevel, setZoomLevel] = useState(100)
+
+  // Check if current user is default admin or document owner
+  const isDefaultAdmin = useAuthStore((state) => state.isDefaultAdmin())
+  const currentUser = useAuthStore((state) => state.user)
 
   // Fetch document
   const { data: document, isLoading, error } = useQuery({
@@ -262,12 +275,73 @@ function DocumentDetail() {
     queryFn: () => documentsAPI.get(id),
   })
 
+  // Check if user is the document owner
+  const isDocumentOwner = document && currentUser && String(document.uploaded_by) === String(currentUser.id)
+
+  // User can delete if they are default admin or document owner
+  const canDelete = isDefaultAdmin || isDocumentOwner
+
   // Fetch versions
   const { data: versions = [] } = useQuery({
     queryKey: ['document-versions', id],
     queryFn: () => documentsAPI.getVersions(id),
     enabled: !!document,
   })
+
+  // Approval workflow mutations
+  const submitForReviewMutation = useMutation({
+    mutationFn: () => documentsAPI.submitForReview(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['document', id] })
+      queryClient.invalidateQueries({ queryKey: ['documents-pending-review'] })
+      toast.success('Document submitted for review!')
+    },
+    onError: (error) => toast.error(error.response?.data?.detail || 'Failed to submit for review'),
+  })
+
+  const approveMutation = useMutation({
+    mutationFn: () => documentsAPI.approve(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['document', id] })
+      queryClient.invalidateQueries({ queryKey: ['documents-pending-review'] })
+      toast.success('Document approved!')
+    },
+    onError: (error) => toast.error(error.response?.data?.detail || 'Failed to approve document'),
+  })
+
+  const rejectMutation = useMutation({
+    mutationFn: () => documentsAPI.reject(id, rejectReason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['document', id] })
+      queryClient.invalidateQueries({ queryKey: ['documents-pending-review'] })
+      toast.success('Document returned to draft.')
+      setIsRejectModalOpen(false)
+      setRejectReason('')
+    },
+    onError: (error) => toast.error(error.response?.data?.detail || 'Failed to reject document'),
+  })
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: () => documentsAPI.delete(id),
+    onSuccess: () => {
+      toast.success('Document deleted successfully')
+      // Navigate back to project documents or previous page
+      if (document?.project_id) {
+        navigate(`/projects/${document.project_id}`)
+      } else {
+        navigate(-1)
+      }
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.detail || 'Failed to delete document')
+    },
+  })
+
+  const handleDelete = () => {
+    deleteMutation.mutate()
+    setIsDeleteModalOpen(false)
+  }
 
   if (isLoading) {
     return (
@@ -294,11 +368,20 @@ function DocumentDetail() {
 
   const statusStyles = {
     draft: { bg: 'bg-surface-100', text: 'text-surface-600' },
-    review: { bg: 'bg-accent-amber/10', text: 'text-accent-amber' },
+    review: { bg: 'bg-amber-100', text: 'text-amber-700' },
+    approved: { bg: 'bg-green-100', text: 'text-green-700' },
     published: { bg: 'bg-accent-green/10', text: 'text-accent-green' },
+    archived: { bg: 'bg-surface-200', text: 'text-surface-500' },
   }
 
   const status = statusStyles[document.status] || statusStyles.draft
+
+  // Approval workflow permissions
+  const reviewerIds = (document.reviewers || []).map(r => String(r.id))
+  const isReviewer = reviewerIds.includes(String(currentUser?.id))
+  const isAdmin = currentUser?.role === 'ADMIN'
+  const canSubmitForReview = isDocumentOwner && (document.status === 'draft' || document.status === 'review')
+  const canApproveOrReject = (isReviewer || isAdmin) && document.status === 'review'
 
   return (
     <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-8 max-w-5xl">
@@ -321,25 +404,55 @@ function DocumentDetail() {
             )}
           </div>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 flex-wrap">
             <span className={clsx('px-3 py-1.5 text-sm font-medium rounded-full capitalize text-center', status.bg, status.text)}>
               {document.status}
             </span>
+
+            {/* Approval Workflow Buttons */}
+            {canSubmitForReview && document.status === 'draft' && (
+              <button
+                onClick={() => submitForReviewMutation.mutate()}
+                disabled={submitForReviewMutation.isPending}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-amber-500 text-white font-medium text-sm rounded-xl hover:bg-amber-600 disabled:opacity-50 transition-colors"
+              >
+                {submitForReviewMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                <span>Submit for Review</span>
+              </button>
+            )}
+            {canApproveOrReject && (
+              <>
+                <button
+                  onClick={() => approveMutation.mutate()}
+                  disabled={approveMutation.isPending}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white font-medium text-sm rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors"
+                >
+                  {approveMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
+                  <span>Approve</span>
+                </button>
+                <button
+                  onClick={() => setIsRejectModalOpen(true)}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-100 text-red-700 font-medium text-sm rounded-xl hover:bg-red-200 transition-colors"
+                >
+                  <XCircle size={16} />
+                  <span>Reject</span>
+                </button>
+              </>
+            )}
+
             <button
               onClick={() => setIsEditModalOpen(true)}
               className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-surface-100 text-surface-700 font-medium text-sm rounded-xl hover:bg-surface-200 transition-colors"
             >
-              <Edit3 size={16} className="sm:hidden" />
-              <Edit3 size={18} className="hidden sm:inline" />
-              <span>Edit Metadata</span>
+              <Edit3 size={18} />
+              <span>Edit</span>
             </button>
             <button
               onClick={() => setIsUploadModalOpen(true)}
               className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white font-medium text-sm rounded-xl hover:bg-primary-700 transition-colors"
             >
-              <Upload size={16} className="sm:hidden" />
-              <Upload size={18} className="hidden sm:inline" />
-              <span>Upload New Version</span>
+              <Upload size={18} />
+              <span>New Version</span>
             </button>
             <button
               onClick={() => setIsPreviewModalOpen(true)}
@@ -348,6 +461,15 @@ function DocumentDetail() {
               <Eye size={16} />
               <span>Preview</span>
             </button>
+            {canDelete && (
+              <button
+                onClick={() => setIsDeleteModalOpen(true)}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white font-medium text-sm rounded-xl hover:bg-red-700 transition-colors"
+              >
+                <Trash2 size={18} />
+                <span>Delete</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -705,6 +827,31 @@ function DocumentDetail() {
           </div>
         </div>
 
+        {/* Reviewers */}
+        {document.reviewers && document.reviewers.length > 0 && (
+          <div className="border-t border-surface-100 pt-4 mb-4">
+            <p className="text-sm text-surface-500 mb-2 flex items-center gap-1.5">
+              <User size={14} /> Assigned Reviewers
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {document.reviewers.map((reviewer) => (
+                <span
+                  key={reviewer.id}
+                  className={clsx(
+                    'px-3 py-1 text-xs font-medium rounded-full border',
+                    reviewerIds.includes(String(currentUser?.id)) && String(reviewer.id) === String(currentUser?.id)
+                      ? 'bg-amber-50 border-amber-200 text-amber-700'
+                      : 'bg-surface-50 border-surface-200 text-surface-600'
+                  )}
+                >
+                  {reviewer.full_name || reviewer.email}
+                  {String(reviewer.id) === String(currentUser?.id) && ' (you)'}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Tags */}
         <div className="border-t border-surface-100 pt-4">
           <TagsSection documentId={id} />
@@ -793,6 +940,54 @@ function DocumentDetail() {
         )}
       </div>
 
+      {/* Reject Modal */}
+      {isRejectModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-surface-900/60 backdrop-blur-sm" onClick={() => setIsRejectModalOpen(false)} />
+          <div className="relative bg-white rounded-2xl shadow-modal w-full max-w-md animate-scale-in">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-surface-100">
+              <h2 className="text-lg font-semibold text-surface-900">Reject Document</h2>
+              <button onClick={() => setIsRejectModalOpen(false)} className="p-1.5 rounded-lg hover:bg-surface-100">
+                <X size={18} className="text-surface-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-surface-600">
+                The document will be returned to <strong>draft</strong> status and the author will be notified.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-surface-700 mb-1.5">Reason (optional)</label>
+                <textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  rows={3}
+                  placeholder="Explain what needs to be changed..."
+                  className="w-full px-4 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-surface-900 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-400 transition-all resize-none"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRejectModalOpen(false)}
+                  className="px-5 py-2.5 text-sm font-medium text-surface-600 hover:text-surface-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => rejectMutation.mutate()}
+                  disabled={rejectMutation.isPending}
+                  className="px-5 py-2.5 bg-red-600 text-white font-medium text-sm rounded-xl hover:bg-red-700 disabled:opacity-50 transition-all flex items-center gap-2"
+                >
+                  {rejectMutation.isPending ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
+                  Reject Document
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Upload Modal */}
       <UploadVersionModal
         isOpen={isUploadModalOpen}
@@ -806,6 +1001,68 @@ function DocumentDetail() {
         onClose={() => setIsEditModalOpen(false)}
         document={document}
       />
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-surface-900/60 backdrop-blur-sm" onClick={() => setIsDeleteModalOpen(false)} />
+
+          <div className="relative bg-white rounded-2xl shadow-modal w-full max-w-md animate-scale-in">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-surface-100">
+              <h2 className="text-lg font-semibold text-surface-900">Delete Document</h2>
+              <button onClick={() => setIsDeleteModalOpen(false)} className="p-1.5 rounded-lg hover:bg-surface-100 transition-colors">
+                <X size={18} className="text-surface-500" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="flex items-start gap-4 mb-6">
+                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                  <Trash2 size={24} className="text-red-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-surface-900 mb-2">Are you sure?</h3>
+                  <p className="text-sm text-surface-600 mb-2">
+                    This will permanently delete <span className="font-semibold">{document?.title}</span> and all of its versions.
+                  </p>
+                  <p className="text-sm text-surface-600">
+                    This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  disabled={deleteMutation.isPending}
+                  className="px-5 py-2.5 text-sm font-medium text-surface-600 hover:text-surface-800 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleteMutation.isPending}
+                  className="px-5 py-2.5 bg-red-600 text-white font-medium text-sm rounded-xl hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                >
+                  {deleteMutation.isPending ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={16} />
+                      Delete Document
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

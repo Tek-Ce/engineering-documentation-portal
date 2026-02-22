@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { lazy, Suspense } from 'react'
 import { useAuthStore } from './store/authStore'
+import { useHeartbeat } from './hooks/useHeartbeat'
 import Layout from './components/Layout'
 import { Loader2 } from 'lucide-react'
 
@@ -44,6 +45,9 @@ function ProtectedRoute({ children, requireAdmin = false }) {
 
 function App() {
   const { isAuthenticated } = useAuthStore()
+
+  // Send heartbeat every 30 seconds to update online status
+  useHeartbeat(30000)
 
   return (
     <Suspense fallback={<PageLoader />}>

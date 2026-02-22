@@ -14,7 +14,17 @@
       "Bash(xargs:*)",
       "Bash(npm run dev:*)",
       "Bash(pip install:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(ls:*)",
+      "Bash(alembic history:*)",
+      "Bash(grep:*)",
+      "Bash(alembic current:*)",
+      "Bash(alembic downgrade:*)",
+      "Bash(alembic upgrade:*)",
+      "Bash(sudo systemctl start:*)",
+      "Bash(sudo service mysql:*)",
+      "Bash(python:*)",
+      "Bash(mysql:*)"
     ],
     "deny": [],
     "ask": []
