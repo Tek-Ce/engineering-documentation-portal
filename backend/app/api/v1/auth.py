@@ -34,50 +34,59 @@ class PasswordResetConfirm(BaseModel):
 async def login(
     username: str = Form(...),
     password: str = Form(...),
+    request: "Request" = None,
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Login with email and password
-    
-    Accepts form-encoded data (username and password fields)
+    Login with email and password.
+    Returns specific error codes so the frontend can show helpful messages.
     """
-    user: Optional[User] = await crud_user.authenticate(
-        db, email=username, password=password
-    )
-    
+    from fastapi import Request as _Request
+
+    # Step 1: does this email exist at all?
+    existing = await crud_user.get_by_email(db, email=username)
+    if not existing:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="NO_ACCOUNT"   # no account with this email
+        )
+
+    # Step 2: verify password
+    user: Optional[User] = await crud_user.authenticate(db, email=username, password=password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
-        )
-    
-    if not bool(user.is_active):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is inactive"
+            detail="WRONG_PASSWORD"
         )
 
+    # Step 3: account checks
+    if not bool(user.is_active):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ACCOUNT_INACTIVE")
+
     if not bool(user.is_email_verified):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="EMAIL_NOT_VERIFIED"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="EMAIL_NOT_VERIFIED")
+
     # Create JWT access token
     access_token = create_access_token(
         data={"sub": str(user.id), "role": str(user.role.value)}
     )
-    
+
     # Update last login timestamp
-    await db.execute(
-        update(User)
-        .where(User.id == user.id)
-        .values(last_login=func.now())
-    )
+    await db.execute(update(User).where(User.id == user.id).values(last_login=func.now()))
     await db.commit()
     await db.refresh(user)
-    
-    # ✅ Manually build UserResponse to avoid async lazy-load issues
+
+    # Send login alert email if user has opted in (fire-and-forget)
+    if bool(user.notify_login_alert):
+        try:
+            from app.services.email_service import EmailService
+            await EmailService.send_login_alert(
+                to_email=str(user.email),
+                to_name=str(user.full_name),
+            )
+        except Exception as e:
+            print(f"[Auth] Login alert email failed: {e}")
+
     user_response = UserResponse(
         id=str(user.id),
         email=str(user.email),
@@ -88,12 +97,8 @@ async def login(
         created_at=cast(datetime, user.created_at),
         updated_at=cast(datetime, user.updated_at)
     )
-    
-    return TokenResponse(
-        access_token=access_token,
-        token_type="bearer",
-        user=user_response
-    )
+
+    return TokenResponse(access_token=access_token, token_type="bearer", user=user_response)
 
 @router.post("/change-password")
 async def change_password(
@@ -117,7 +122,18 @@ async def change_password(
     )
     await db.commit()
     await db.refresh(current_user)
-    
+
+    # Notify user of password change if security events are enabled
+    if bool(current_user.notify_security_events):
+        try:
+            from app.services.email_service import EmailService
+            await EmailService.send_password_changed(
+                to_email=str(current_user.email),
+                to_name=str(current_user.full_name),
+            )
+        except Exception as e:
+            print(f"[Auth] Password changed email failed: {e}")
+
     return {"message": "Password changed successfully"}
 
 @router.get("/me", response_model=UserResponse)

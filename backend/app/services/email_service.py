@@ -388,6 +388,114 @@ class EmailService:
             print(f"[Email] Failed to send review request to {to_email}: {e}")
             return False
 
+    # ─── Login Alert ────────────────────────────────────────────────────────
+
+    @classmethod
+    async def send_login_alert(cls, to_email: str, to_name: str, ip_address: str = "Unknown") -> bool:
+        """Notify user that a new login was detected on their account"""
+        try:
+            resend = cls._get_client()
+            settings_url = f"{cls._app_url()}/settings"
+            html = f"""
+<!DOCTYPE html><html><body style="font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;margin:0;padding:40px 20px">
+  <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+    <div style="background:linear-gradient(135deg,#4c6ef5,#364fc7);padding:28px 32px;text-align:center">
+      <h2 style="color:#fff;margin:0;font-size:20px">New Login Detected</h2>
+    </div>
+    <div style="padding:32px">
+      <p style="color:#374151;font-size:15px">Hi <strong>{to_name}</strong>,</p>
+      <p style="color:#6b7280;font-size:15px;line-height:1.6">A new login to your DocPortal account was just detected.</p>
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px 20px;margin:20px 0">
+        <p style="color:#374151;font-size:13px;margin:0 0 6px"><strong>IP Address:</strong> {ip_address}</p>
+        <p style="color:#6b7280;font-size:12px;margin:0">If this was you, no action is needed.</p>
+      </div>
+      <p style="color:#6b7280;font-size:14px;line-height:1.6">
+        If you did not log in, your account may be compromised. Change your password immediately.
+      </p>
+      <a href="{settings_url}" style="display:inline-block;margin-top:12px;padding:12px 28px;background:#4c6ef5;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px">
+        Go to Security Settings
+      </a>
+    </div>
+    <div style="background:#f9fafb;padding:16px 32px;text-align:center">
+      <p style="color:#9ca3af;font-size:12px;margin:0">Engineering Documentation Portal &middot; You can turn off login alerts in Settings</p>
+    </div>
+  </div>
+</body></html>"""
+            resend.Emails.send({"from": cls._from_address(), "to": [to_email], "subject": "New login to your DocPortal account", "html": html})
+            print(f"[Email] Login alert sent to {to_email}")
+            return True
+        except Exception as e:
+            print(f"[Email] Failed to send login alert to {to_email}: {e}")
+            return False
+
+    # ─── Password Changed ────────────────────────────────────────────────────
+
+    @classmethod
+    async def send_password_changed(cls, to_email: str, to_name: str) -> bool:
+        """Notify user their password was changed"""
+        try:
+            resend = cls._get_client()
+            reset_url = f"{cls._app_url()}/forgot-password"
+            html = f"""
+<!DOCTYPE html><html><body style="font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;margin:0;padding:40px 20px">
+  <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+    <div style="background:linear-gradient(135deg,#d97706,#b45309);padding:28px 32px;text-align:center">
+      <h2 style="color:#fff;margin:0;font-size:20px">Password Changed</h2>
+    </div>
+    <div style="padding:32px">
+      <p style="color:#374151;font-size:15px">Hi <strong>{to_name}</strong>,</p>
+      <p style="color:#6b7280;font-size:15px;line-height:1.6">Your DocPortal account password was successfully changed.</p>
+      <p style="color:#6b7280;font-size:14px;line-height:1.6">
+        If you made this change, no action is required. If you did <strong>not</strong> change your password,
+        reset it immediately and contact your administrator.
+      </p>
+      <a href="{reset_url}" style="display:inline-block;margin-top:12px;padding:12px 28px;background:#d97706;color:#fff;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px">
+        Reset My Password
+      </a>
+    </div>
+    <div style="background:#f9fafb;padding:16px 32px;text-align:center">
+      <p style="color:#9ca3af;font-size:12px;margin:0">Engineering Documentation Portal</p>
+    </div>
+  </div>
+</body></html>"""
+            resend.Emails.send({"from": cls._from_address(), "to": [to_email], "subject": "Your DocPortal password was changed", "html": html})
+            print(f"[Email] Password changed alert sent to {to_email}")
+            return True
+        except Exception as e:
+            print(f"[Email] Failed to send password changed alert to {to_email}: {e}")
+            return False
+
+    # ─── Account Deactivated ─────────────────────────────────────────────────
+
+    @classmethod
+    async def send_account_deactivated(cls, to_email: str, to_name: str) -> bool:
+        """Notify user their account was deactivated by an admin"""
+        try:
+            resend = cls._get_client()
+            html = f"""
+<!DOCTYPE html><html><body style="font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;margin:0;padding:40px 20px">
+  <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+    <div style="background:linear-gradient(135deg,#6b7280,#4b5563);padding:28px 32px;text-align:center">
+      <h2 style="color:#fff;margin:0;font-size:20px">Account Deactivated</h2>
+    </div>
+    <div style="padding:32px">
+      <p style="color:#374151;font-size:15px">Hi <strong>{to_name}</strong>,</p>
+      <p style="color:#6b7280;font-size:15px;line-height:1.6">
+        Your DocPortal account has been deactivated by an administrator. You will no longer be able to log in.
+      </p>
+      <p style="color:#6b7280;font-size:14px">If you believe this is an error, please contact your system administrator.</p>
+    </div>
+    <div style="background:#f9fafb;padding:16px 32px;text-align:center">
+      <p style="color:#9ca3af;font-size:12px;margin:0">Engineering Documentation Portal</p>
+    </div>
+  </div>
+</body></html>"""
+            resend.Emails.send({"from": cls._from_address(), "to": [to_email], "subject": "Your DocPortal account has been deactivated", "html": html})
+            return True
+        except Exception as e:
+            print(f"[Email] Failed to send deactivation notice to {to_email}: {e}")
+            return False
+
 
 # Convenience export
 email_service = EmailService()

@@ -82,6 +82,10 @@ async def create_user(
             detail="Email already registered"
         )
     
+    # Generate a temporary password if admin didn't provide one (or always override)
+    import secrets as _secrets
+    temp_password = user_in.password  # use the one admin provided
+
     user = await crud_user.create(
         db,
         obj_in=user_in,
@@ -92,8 +96,7 @@ async def create_user(
     await db.commit()
     await db.refresh(user)
 
-    # Generate verification token and send welcome email
-    import secrets as _secrets
+    # Generate verification token and send welcome email with temp credentials
     from app.api.v1.auth import verification_tokens
     token = _secrets.token_urlsafe(32)
     verification_tokens[token] = str(user.email)
@@ -104,6 +107,7 @@ async def create_user(
             to_email=str(user.email),
             to_name=str(user.full_name),
             verification_token=token,
+            temporary_password=temp_password,
         )
     except Exception as e:
         print(f"[Users] Welcome email failed for {user.email}: {e}")
@@ -209,4 +213,62 @@ async def deactivate_user(
         )
 
     await db.commit()
+
+    # Notify the deactivated user by email
+    try:
+        from app.services.email_service import EmailService
+        await EmailService.send_account_deactivated(
+            to_email=str(target_user.email),
+            to_name=str(target_user.full_name),
+        )
+    except Exception as e:
+        print(f"[Users] Deactivation email failed for {target_user.email}: {e}")
     return {"message": "User deactivated successfully"}
+
+
+# ==========================================
+# NOTIFICATION PREFERENCES
+# ==========================================
+
+from pydantic import BaseModel as _BaseModel
+
+class NotificationPrefs(_BaseModel):
+    notify_login_alert: Optional[bool] = None
+    notify_security_events: Optional[bool] = None
+    notify_document_activity: Optional[bool] = None
+
+
+@router.get("/me/notification-prefs")
+async def get_notification_prefs(
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get current user's email notification preferences"""
+    return {
+        "notify_login_alert": bool(current_user.notify_login_alert),
+        "notify_security_events": bool(current_user.notify_security_events),
+        "notify_document_activity": bool(current_user.notify_document_activity),
+    }
+
+
+@router.patch("/me/notification-prefs")
+async def update_notification_prefs(
+    prefs: NotificationPrefs,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Update current user's email notification preferences"""
+    if prefs.notify_login_alert is not None:
+        current_user.notify_login_alert = prefs.notify_login_alert  # type: ignore
+    if prefs.notify_security_events is not None:
+        current_user.notify_security_events = prefs.notify_security_events  # type: ignore
+    if prefs.notify_document_activity is not None:
+        current_user.notify_document_activity = prefs.notify_document_activity  # type: ignore
+
+    await db.commit()
+    await db.refresh(current_user)
+
+    return {
+        "notify_login_alert": bool(current_user.notify_login_alert),
+        "notify_security_events": bool(current_user.notify_security_events),
+        "notify_document_activity": bool(current_user.notify_document_activity),
+    }

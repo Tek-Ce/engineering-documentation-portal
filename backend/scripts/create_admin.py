@@ -129,6 +129,7 @@ class AdminCreator:
                 password_hash=password_hash,
                 role="ADMIN",
                 is_active=True,
+                is_email_verified=True,
                 created_by=None
             )
             
@@ -210,7 +211,7 @@ class AdminCreator:
                 print("=" * 60)
                 print()
                 print(f"   📧 Email:    admin@engportal.local")
-                print(f"   🔑 Password: admin123")
+                print(f"   🔑 Password: admin@123")
                 print(f"   👤 Name:     {admin.full_name}")
                 print(f"   🎭 Role:     {admin.role}")
                 print()

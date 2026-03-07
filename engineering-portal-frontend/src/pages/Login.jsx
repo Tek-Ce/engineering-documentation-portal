@@ -45,11 +45,18 @@ function Login() {
       navigate('/')
     },
     onError: (error) => {
-      if (error.response?.data?.detail === 'EMAIL_NOT_VERIFIED') {
+      const detail = error.response?.data?.detail
+      if (detail === 'EMAIL_NOT_VERIFIED') {
         setUnverifiedEmail(getValues('email'))
         setResendSent(false)
+      } else if (detail === 'NO_ACCOUNT') {
+        toast.error('No account found with this email address.')
+      } else if (detail === 'WRONG_PASSWORD') {
+        toast.error('Incorrect password. Please try again.')
+      } else if (detail === 'ACCOUNT_INACTIVE') {
+        toast.error('Your account has been deactivated. Contact your administrator.')
       } else {
-        toast.error(error.response?.data?.detail || 'Login failed. Please try again.')
+        toast.error(detail || 'Login failed. Please try again.')
       }
     },
   })

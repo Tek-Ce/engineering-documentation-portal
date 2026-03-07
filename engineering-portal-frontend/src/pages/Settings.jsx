@@ -13,7 +13,8 @@ import {
   Loader2,
   Check,
   FolderKanban,
-  ArrowRight
+  ArrowRight,
+  Bell
 } from 'lucide-react'
 import { authAPI, projectsAPI } from '../api/client'
 import { useAuthStore } from '../store/authStore'
@@ -118,6 +119,7 @@ function Settings() {
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'projects', label: 'My Projects', icon: FolderKanban },
     { id: 'security', label: 'Security', icon: Lock },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
   ]
 
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
@@ -317,6 +319,10 @@ function Settings() {
             </div>
           )}
 
+          {activeTab === 'notifications' && (
+            <NotificationPrefsPanel />
+          )}
+
           {activeTab === 'security' && (
             <div className="max-w-md">
               <h3 className="text-lg font-semibold text-surface-900 mb-1">Change Password</h3>
@@ -438,6 +444,97 @@ function Settings() {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function NotificationPrefsPanel() {
+  const { data: prefs, isLoading } = useQuery({
+    queryKey: ['notification-prefs'],
+    queryFn: () => authAPI.getNotificationPrefs(),
+  })
+
+  const mutation = useMutation({
+    mutationFn: (updates) => authAPI.updateNotificationPrefs(updates),
+    onSuccess: () => toast.success('Notification preferences saved'),
+    onError: () => toast.error('Failed to save preferences'),
+  })
+
+  const toggle = (key, currentValue) => {
+    mutation.mutate({ [key]: !currentValue })
+  }
+
+  const options = [
+    {
+      key: 'notify_login_alert',
+      label: 'Login alerts',
+      description: 'Get an email every time someone logs into your account from a new session.',
+    },
+    {
+      key: 'notify_security_events',
+      label: 'Security events',
+      description: 'Get an email when your password is changed or your account settings are modified.',
+    },
+    {
+      key: 'notify_document_activity',
+      label: 'Document activity',
+      description: 'Get an email when your documents are approved, rejected, or sent for review.',
+    },
+  ]
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-surface-500 py-8">
+        <Loader2 size={18} className="animate-spin" />
+        <span className="text-sm">Loading preferences...</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-md">
+      <h3 className="text-lg font-semibold text-surface-900 mb-1">Email Notifications</h3>
+      <p className="text-sm text-surface-500 mb-6">
+        Choose which events trigger an email notification to your inbox.
+      </p>
+
+      <div className="space-y-4">
+        {options.map(({ key, label, description }) => {
+          const enabled = prefs ? prefs[key] : false
+          return (
+            <div key={key} className="flex items-start justify-between gap-4 p-4 bg-surface-50 rounded-xl border border-surface-100">
+              <div className="flex-1">
+                <p className="text-sm font-medium text-surface-900">{label}</p>
+                <p className="text-sm text-surface-500 mt-0.5">{description}</p>
+              </div>
+              <button
+                onClick={() => toggle(key, enabled)}
+                disabled={mutation.isPending}
+                className={clsx(
+                  'relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50',
+                  enabled ? 'bg-primary-600' : 'bg-surface-300'
+                )}
+                role="switch"
+                aria-checked={enabled}
+              >
+                <span
+                  className={clsx(
+                    'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200',
+                    enabled ? 'translate-x-5' : 'translate-x-0'
+                  )}
+                />
+              </button>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="mt-6 p-4 bg-blue-50 border border-blue-100 rounded-xl">
+        <p className="text-sm text-blue-700">
+          <strong>Note:</strong> Emails are sent to <strong>{}</strong> your registered email address.
+          To receive emails, your domain must be verified with our mail provider.
+        </p>
       </div>
     </div>
   )

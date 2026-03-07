@@ -28,6 +28,9 @@ class User(Base):
     is_email_verified = Column(Boolean, default=False, nullable=False)
     last_login = Column(DateTime, nullable=True)
     last_activity = Column(DateTime, nullable=True)  # Track user's last activity for online status
+    notify_login_alert = Column(Boolean, default=False, nullable=False)      # Email on new login
+    notify_security_events = Column(Boolean, default=True, nullable=False)   # Email on password change / account changes
+    notify_document_activity = Column(Boolean, default=True, nullable=False) # Email on document approvals/reviews
     created_by = Column(String(36), ForeignKey('users.id', ondelete='SET NULL', onupdate='CASCADE'))
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

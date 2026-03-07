@@ -85,6 +85,16 @@ export const authAPI = {
     const response = await api.post('/auth/resend-verification', { email })
     return response.data
   },
+
+  getNotificationPrefs: async () => {
+    const response = await api.get('/users/me/notification-prefs')
+    return response.data
+  },
+
+  updateNotificationPrefs: async (prefs) => {
+    const response = await api.patch('/users/me/notification-prefs', prefs)
+    return response.data
+  },
 }
 
 // Projects API
