@@ -15,6 +15,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ubuntu
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 20m
           script: |
             cd /opt/docportal
 
@@ -23,7 +24,7 @@ jobs:
             git reset --hard origin/main
 
             # Rebuild and restart only backend + frontend (mysql stays up)
-            docker compose -f docker-compose.prod.yml build --no-cache backend frontend
+            docker compose -f docker-compose.prod.yml build backend frontend
             docker compose -f docker-compose.prod.yml up -d --no-deps backend frontend
 
             # Wait for backend to start

@@ -36,9 +36,12 @@ python-pptx==1.0.2
 python-slugify==8.0.4
 
 # ML/AI for Knowledge Base
-numpy==2.3.5
-scikit-learn==1.7.2
-sentence-transformers==5.1.2
+# CPU-only torch prevents downloading 2-3GB of NVIDIA/CUDA packages on the server
+--extra-index-url https://download.pytorch.org/whl/cpu
+numpy==1.26.4
+scikit-learn==1.6.1
+torch==2.3.1+cpu
+sentence-transformers==3.0.1
 
 # Optional: OpenAI for AI Chat (set OPENAI_API_KEY env var to enable)
 openai==1.86.0
