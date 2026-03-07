@@ -2,17 +2,17 @@
 # FILE: app/services/activity_service.py
 # ============================================
 """
-Activity Service - Log user activities
+Activity Service - Log user activities (persisted to activity_logs table)
 """
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime, timezone
-import uuid
+
+from app.crud.activity_log import crud_activity_log
 
 
 class ActivityService:
     """Service for logging user activities"""
-    
+
     @classmethod
     async def log_activity(
         cls,
@@ -27,33 +27,23 @@ class ActivityService:
         user_agent: Optional[str] = None
     ):
         """
-        Log an activity
-        
+        Log an activity to the database.
+
         Actions: DOCUMENT_UPLOADED, DOCUMENT_UPDATED, DOCUMENT_DELETED,
+                 DOCUMENT_SUBMITTED_REVIEW, DOCUMENT_APPROVED, DOCUMENT_REJECTED,
                  PROJECT_CREATED, COMMENT_ADDED, etc.
         """
-        # You can store activities in database or log them
-        # For now, we'll create a simple activity log
-        
-        activity_data = {
-            "id": str(uuid.uuid4()),
-            "user_id": user_id,
-            "action": action,
-            "resource_type": resource_type,
-            "resource_id": resource_id,
-            "description": description,
-            "project_id": project_id,
-            "ip_address": ip_address,
-            "user_agent": user_agent,
-            "timestamp": datetime.now(timezone.utc)
-
-        }
-        
-        # TODO: Store in activity_logs table if you have one
-        # For now, just log it
-        print(f"[ACTIVITY] {action} by user {user_id}: {description}")
-        
-        return activity_data
+        log = await crud_activity_log.create(
+            db,
+            user_id=user_id or "",
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            description=description,
+            project_id=project_id,
+            ip_address=ip_address,
+        )
+        return log
     
     @classmethod
     async def get_user_activities(

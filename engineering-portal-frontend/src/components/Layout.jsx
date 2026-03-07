@@ -11,7 +11,8 @@ import {
   X,
   ChevronDown,
   Hexagon,
-  Database
+  Database,
+  Eye
 } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useAuthStore, useUIStore } from '../store/authStore'
@@ -44,6 +45,21 @@ function Layout() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // Lock body scroll when mobile sidebar is open
+  useEffect(() => {
+    if (sidebarOpen && window.innerWidth < 1024) {
+      document.body.style.overflow = 'hidden'
+      document.body.style.touchAction = 'none'
+    } else {
+      document.body.style.overflow = ''
+      document.body.style.touchAction = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+      document.body.style.touchAction = ''
+    }
+  }, [sidebarOpen])
+
   const handleLogout = () => {
     logout()
     navigate('/login')
@@ -52,6 +68,7 @@ function Layout() {
   const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/projects', icon: FolderKanban, label: 'Projects' },
+    { to: '/reviews', icon: Eye, label: 'Review Queue' },
     { to: '/knowledge-base', icon: Database, label: 'Knowledge Base' },
     { to: '/notifications', icon: Bell, label: 'Notifications', badge: notifStats?.unread },
   ]
@@ -63,24 +80,28 @@ function Layout() {
 
   return (
     <div className="min-h-screen bg-surface-50 flex">
-      {/* Mobile Overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-surface-900/60 backdrop-blur-sm z-30 lg:hidden"
-          onClick={toggleSidebar}
-        />
-      )}
+      {/* Mobile Overlay - slides in with sidebar */}
+      <div
+        className={clsx(
+          'fixed inset-0 z-30 lg:hidden transition-opacity duration-300 ease-out',
+          sidebarOpen ? 'bg-surface-900/60 backdrop-blur-sm opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        )}
+        onClick={toggleSidebar}
+        aria-hidden="true"
+      />
 
-      {/* Sidebar */}
+      {/* Sidebar - smooth slide on mobile */}
       <aside
         className={clsx(
-          'fixed inset-y-0 left-0 z-40 flex flex-col bg-surface-900 text-white transition-all duration-300 ease-out',
-          // Mobile: Full overlay sidebar
-          'lg:relative',
+          'fixed inset-y-0 left-0 z-40 flex flex-col bg-surface-900 text-white',
+          'transition-[transform,width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
+          'lg:relative lg:transition-none',
           sidebarOpen
-            ? 'w-64 translate-x-0'
+            ? 'w-64 translate-x-0 shadow-xl lg:shadow-none'
             : 'w-64 -translate-x-full lg:translate-x-0 lg:w-20'
         )}
+        role="navigation"
+        aria-label="Main navigation"
       >
         {/* Logo */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-surface-700/50">
@@ -154,6 +175,9 @@ function Layout() {
                 <NavLink
                   key={item.to}
                   to={item.to}
+                  onClick={() => {
+                    if (window.innerWidth < 1024) toggleSidebar()
+                  }}
                   className={({ isActive }) =>
                     clsx(
                       'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150',

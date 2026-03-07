@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
@@ -23,20 +23,28 @@ import {
   ChevronDown,
   Search
 } from 'lucide-react'
-import { projectsAPI, documentsAPI, usersAPI, tagsAPI } from '../api/client'
+import { projectsAPI, documentsAPI, usersAPI, tagsAPI, adminAPI } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 import { formatDistanceToNow, format } from 'date-fns'
 import clsx from 'clsx'
 import ProjectCommentsSection from '../components/ProjectCommentsSection'
+import { UserAvatarWithStatus } from '../components/OnlineUsersIndicator'
 
-// Document Upload Modal
-function UploadDocumentModal({ isOpen, onClose, projectId }) {
+// Document Upload Modal – reviewers default to project creator unless changed
+function UploadDocumentModal({ isOpen, onClose, projectId, project }) {
   const queryClient = useQueryClient()
   const fileInputRef = useRef(null)
   const [selectedFile, setSelectedFile] = useState(null)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [selectedTags, setSelectedTags] = useState([])
   const [selectedReviewers, setSelectedReviewers] = useState([])
+
+  // Default reviewers to project creator when modal opens (owners/editors can change)
+  useEffect(() => {
+    if (isOpen && project?.created_by) {
+      setSelectedReviewers([project.created_by])
+    }
+  }, [isOpen, project?.created_by])
 
   const {
     register,
@@ -249,10 +257,10 @@ function UploadDocumentModal({ isOpen, onClose, projectId }) {
             </div>
           </div>
 
-          {/* Reviewers */}
+          {/* Reviewers – default: project creator; changeable by owners/editors */}
           <div>
             <label className="block text-sm font-medium text-surface-700 mb-1.5">
-              Assign Reviewers (Optional)
+              Assign Reviewers <span className="text-surface-500 font-normal">(default: project creator)</span>
             </label>
             <div className="space-y-2 max-h-40 overflow-y-auto p-3 bg-surface-50 border border-surface-200 rounded-xl">
               {membersData?.members?.map((member) => (
@@ -651,8 +659,199 @@ function DocumentRow({ document, projectId }) {
   )
 }
 
+// Project Settings Tab (edit project + danger zone)
+function ProjectSettingsTab({ project, onUpdated, onArchived, onDeleted }) {
+  const queryClient = useQueryClient()
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isDirty },
+  } = useForm({
+    defaultValues: {
+      name: project?.name ?? '',
+      code: project?.code ?? '',
+      brief: project?.brief ?? '',
+      description: project?.description ?? '',
+      status: (project?.status || 'active').toLowerCase(),
+    },
+    values: {
+      name: project?.name ?? '',
+      code: project?.code ?? '',
+      brief: project?.brief ?? '',
+      description: project?.description ?? '',
+      status: (project?.status || 'active').toLowerCase(),
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: (data) => projectsAPI.update(project.id, {
+      name: data.name,
+      code: data.code,
+      brief: data.brief || undefined,
+      description: data.description || undefined,
+      status: data.status?.toUpperCase?.(),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', project.id] })
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      toast.success('Project updated')
+      onUpdated?.()
+    },
+    onError: (error) => toast.error(error.response?.data?.detail || 'Failed to update project'),
+  })
+
+  const archiveMutation = useMutation({
+    mutationFn: () => projectsAPI.archive(project.id),
+    onSuccess: () => {
+      toast.success('Project archived')
+      onArchived?.()
+    },
+    onError: (error) => toast.error(error.response?.data?.detail || 'Failed to archive'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => projectsAPI.delete(project.id),
+    onSuccess: () => {
+      toast.success('Project deleted')
+      onDeleted?.()
+    },
+    onError: (error) => toast.error(error.response?.data?.detail || 'Failed to delete'),
+  })
+
+  const isArchived = project?.status === 'archived' || project?.status === 'ARCHIVED'
+
+  return (
+    <div className="space-y-6">
+      {/* Edit project */}
+      <div className="bg-white rounded-2xl border border-surface-200 p-6">
+        <h3 className="font-semibold text-surface-900 mb-4">Project details</h3>
+        <form onSubmit={handleSubmit((data) => updateMutation.mutate(data))} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1.5">Project name</label>
+            <input
+              {...register('name', { required: 'Name is required' })}
+              className="w-full h-11 px-4 bg-surface-50 border border-surface-200 rounded-xl text-surface-900 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
+              placeholder="Project name"
+            />
+            {errors.name && <p className="mt-1 text-sm text-accent-red">{errors.name.message}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1.5">Project code</label>
+            <input
+              {...register('code', {
+                required: 'Code is required',
+                pattern: { value: /^[A-Z0-9_-]+$/i, message: 'Letters, numbers, dashes and underscores only' },
+                minLength: { value: 2, message: 'At least 2 characters' },
+                maxLength: { value: 20, message: 'At most 20 characters' },
+              })}
+              className="w-full h-11 px-4 bg-surface-50 border border-surface-200 rounded-xl text-surface-900 font-mono uppercase focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
+              placeholder="e.g. PROJ-01"
+            />
+            {errors.code && <p className="mt-1 text-sm text-accent-red">{errors.code.message}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1.5">Brief summary</label>
+            <input
+              {...register('brief', { maxLength: { value: 500, message: 'Max 500 characters' } })}
+              className="w-full h-11 px-4 bg-surface-50 border border-surface-200 rounded-xl text-surface-900 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
+              placeholder="Short summary"
+            />
+            {errors.brief && <p className="mt-1 text-sm text-accent-red">{errors.brief.message}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1.5">Description</label>
+            <textarea
+              {...register('description')}
+              rows={4}
+              className="w-full px-4 py-3 bg-surface-50 border border-surface-200 rounded-xl text-surface-900 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 resize-none"
+              placeholder="Full description"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-surface-700 mb-1.5">Status</label>
+            <select
+              {...register('status')}
+              className="w-full h-11 px-4 bg-surface-50 border border-surface-200 rounded-xl text-surface-900 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
+            >
+              <option value="active">Active</option>
+              <option value="completed">Completed</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={updateMutation.isPending || !isDirty}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white font-medium rounded-xl hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {updateMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+              Save changes
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Danger zone */}
+      <div className="bg-white rounded-2xl border border-red-200 p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <AlertTriangle size={20} className="text-accent-red" />
+          <h3 className="font-semibold text-surface-900">Danger zone</h3>
+        </div>
+        <p className="text-sm text-surface-500 mb-4">
+          Archive or delete this project. Archived projects can be restored from the Projects list.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          {!isArchived ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('Archive this project? You can restore it from the Projects page.')) {
+                  archiveMutation.mutate()
+                }
+              }}
+              disabled={archiveMutation.isPending}
+              className="px-4 py-2.5 border border-amber-300 text-amber-700 font-medium rounded-xl hover:bg-amber-50 disabled:opacity-50 transition-colors"
+            >
+              {archiveMutation.isPending ? <Loader2 size={16} className="animate-spin inline" /> : 'Archive project'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm('Restore this project?')) {
+                  projectsAPI.restore(project.id).then(() => {
+                    queryClient.invalidateQueries({ queryKey: ['project', project.id] })
+                    queryClient.invalidateQueries({ queryKey: ['projects'] })
+                    toast.success('Project restored')
+                    onUpdated?.()
+                  }).catch((err) => toast.error(err.response?.data?.detail || 'Failed to restore'))
+                }
+              }}
+              className="px-4 py-2.5 border border-accent-green text-accent-green font-medium rounded-xl hover:bg-green-50 transition-colors"
+            >
+              Restore project
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm('Permanently delete this project and all its documents? This cannot be undone.')) {
+                deleteMutation.mutate()
+              }
+            }}
+            disabled={deleteMutation.isPending}
+            className="px-4 py-2.5 bg-red-600 text-white font-medium rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors"
+          >
+            {deleteMutation.isPending ? <Loader2 size={16} className="animate-spin inline" /> : 'Delete project'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Member Row
-function MemberRow({ member, isOwner, onUpdateRole, onRemove }) {
+function MemberRow({ member, isOwner, onUpdateRole, onRemove, isOnline = false }) {
   const [menuOpen, setMenuOpen] = useState(false)
   
   const roleColors = {
@@ -661,11 +860,15 @@ function MemberRow({ member, isOwner, onUpdateRole, onRemove }) {
     VIEWER: 'bg-surface-100 text-surface-600',
   }
 
+  const userForAvatar = {
+    full_name: member.user_name,
+    user_name: member.user_name,
+    email: member.user_email,
+  }
+
   return (
     <div className="flex items-center gap-4 p-4 bg-white rounded-xl border border-surface-200 group">
-      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-semibold flex-shrink-0">
-        {member.user_name?.charAt(0) || 'U'}
-      </div>
+      <UserAvatarWithStatus user={userForAvatar} isOnline={isOnline} size="md" showStatus />
       
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
@@ -771,6 +974,15 @@ function ProjectDetail() {
     queryFn: () => documentsAPI.listByProject(id),
     enabled: !!project,
   })
+
+  // Fetch online users for member status in Members tab
+  const { data: onlineUsersData } = useQuery({
+    queryKey: ['online-users'],
+    queryFn: () => adminAPI.getOnlineUsers(5),
+    refetchInterval: 20000,
+    staleTime: 10000,
+  })
+  const onlineUserIds = (onlineUsersData?.online_users || []).map(u => u.id)
 
   // Check if user is owner
   const isOwner = members.some(m => m.user_id === user?.id && m.role === 'OWNER') || user?.role === 'ADMIN'
@@ -975,6 +1187,7 @@ function ProjectDetail() {
                   key={member.id}
                   member={member}
                   isOwner={isOwner}
+                  isOnline={onlineUserIds.includes(member.user_id)}
                   onUpdateRole={(userId, role) => updateRoleMutation.mutate({ userId, role })}
                   onRemove={(userId) => {
                     if (window.confirm('Remove this member from the project?')) {
@@ -992,16 +1205,22 @@ function ProjectDetail() {
         )}
 
         {activeTab === 'settings' && (
-          <div className="bg-white rounded-2xl border border-surface-200 p-6">
-            <h3 className="font-semibold text-surface-900 mb-4">Project Settings</h3>
-            <p className="text-surface-500">Settings panel coming soon...</p>
-          </div>
+          <ProjectSettingsTab
+            project={project}
+            onUpdated={() => {
+              queryClient.invalidateQueries({ queryKey: ['project', id] })
+              queryClient.invalidateQueries({ queryKey: ['project-stats', id] })
+            }}
+            onArchived={() => navigate('/projects')}
+            onDeleted={() => navigate('/projects')}
+          />
         )}
       </div>
 
       {/* Upload Modal */}
       <UploadDocumentModal
         isOpen={isUploadModalOpen}
+        project={project}
         onClose={() => setIsUploadModalOpen(false)}
         projectId={id}
       />

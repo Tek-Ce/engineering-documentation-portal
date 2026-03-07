@@ -2,8 +2,10 @@
 # FILE: app/api/v1/documents.py (FIXED)
 # ============================================
 from typing import Optional, List
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request, Query, BackgroundTasks
 from fastapi.responses import FileResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pathlib import Path
 import mimetypes
@@ -13,6 +15,7 @@ from app.models.user import User
 from app.models.project_member import ProjectMemberRole
 from app.schemas.document import DocumentCreate, DocumentUpdate, DocumentResponse, DocumentStatus, DocumentType, DocumentVersionResponse
 from app.crud.document import crud_document
+from app.crud.activity_log import crud_activity_log
 from app.api.deps import get_current_user, check_project_access
 from app.services.file_service import FileService
 from app.services.notification_service import NotificationService
@@ -22,6 +25,18 @@ from app.crud.kb import crud_kb_job, crud_kb_chunk
 from app.services.indexer_service import IndexerService
 
 router = APIRouter()
+
+
+class DocumentActivityItem(BaseModel):
+    id: str
+    user_name: Optional[str] = None
+    action: str
+    description: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class DocumentActivityListResponse(BaseModel):
+    logs: List[DocumentActivityItem]
 
 
 # Background task for document indexing
@@ -140,16 +155,23 @@ async def upload_document(
             )
             db.add(doc_tag)
 
-    # Add reviewers if provided
-    if reviewer_ids:
-        from app.models.document import document_reviewers
-        reviewer_id_list = [r.strip() for r in reviewer_ids.split(',') if r.strip()]
-        for reviewer_id in reviewer_id_list:
-            stmt = document_reviewers.insert().values(
-                document_id=str(document.id),
-                user_id=reviewer_id
-            )
-            await db.execute(stmt)
+    # Add reviewers: use provided list, or default to project creator
+    from app.models.document import document_reviewers
+    from app.models.project import Project
+    reviewer_id_list = [r.strip() for r in (reviewer_ids or "").split(",") if r.strip()]
+    if not reviewer_id_list:
+        # Default to project creator as reviewer
+        proj_stmt = select(Project).where(Project.id == project_id)
+        proj_result = await db.execute(proj_stmt)
+        project = proj_result.scalar_one_or_none()
+        if project and getattr(project, "created_by", None):
+            reviewer_id_list = [str(project.created_by)]
+    for reviewer_id in reviewer_id_list:
+        stmt = document_reviewers.insert().values(
+            document_id=str(document.id),
+            user_id=reviewer_id
+        )
+        await db.execute(stmt)
 
     await db.flush()
     await db.refresh(document)
@@ -235,6 +257,39 @@ async def get_recently_viewed(
     return [DocumentResponse.model_validate(d) for d in documents]
 
 
+@router.get("/pending-review", response_model=List[DocumentResponse])
+async def get_pending_review_documents(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get all documents currently in review status that the user needs to action"""
+    from sqlalchemy import select
+    from app.models.document import Document, document_reviewers as dr_table
+
+    if current_user.role == "ADMIN":
+        stmt = (
+            select(Document)
+            .where(Document.status == "review")
+            .order_by(Document.updated_at.desc())
+            .limit(20)
+        )
+    else:
+        stmt = (
+            select(Document)
+            .join(dr_table, dr_table.c.document_id == Document.id)
+            .where(
+                Document.status == "review",
+                dr_table.c.user_id == str(current_user.id)
+            )
+            .order_by(Document.updated_at.desc())
+            .limit(20)
+        )
+
+    result = await db.execute(stmt)
+    documents = result.scalars().unique().all()
+    return [DocumentResponse.model_validate(d) for d in documents]
+
+
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
     document_id: str,
@@ -269,6 +324,39 @@ async def get_document(
         pass  # Non-critical — don't fail if tracking fails
 
     return DocumentResponse.model_validate(document)
+
+
+@router.get("/{document_id}/activity", response_model=DocumentActivityListResponse)
+async def get_document_activity(
+    document_id: str,
+    limit: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get activity log for a document (view, submit review, approve, reject, etc.). Requires project access."""
+    document = await crud_document.get(db, id=document_id)
+    if not document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    await check_project_access(document.project_id, current_user=current_user, db=db)
+    logs = await crud_activity_log.get_logs(
+        db,
+        skip=0,
+        limit=limit,
+        resource_type="document",
+        resource_id=document_id,
+    )
+    return DocumentActivityListResponse(
+        logs=[
+            DocumentActivityItem(
+                id=log["id"],
+                user_name=log.get("user_name"),
+                action=log["action"],
+                description=log.get("description"),
+                created_at=log.get("created_at"),
+            )
+            for log in logs
+        ]
+    )
 
 
 @router.patch("/{document_id}", response_model=DocumentResponse)
@@ -576,6 +664,22 @@ async def submit_for_review(
 
     await db.commit()
     await db.refresh(document)
+
+    # Email reviewers (non-blocking)
+    try:
+        from app.services.email_service import EmailService
+        for rev in document.reviewers:
+            if str(rev.id) != str(current_user.id):
+                await EmailService.send_review_requested(
+                    to_email=str(rev.email),
+                    to_name=str(rev.full_name),
+                    document_title=document.title,
+                    document_id=str(document.id),
+                    requester_name=str(current_user.full_name),
+                )
+    except Exception as e:
+        print(f"[Email] Review request email failed: {e}")
+
     return DocumentResponse.model_validate(document)
 
 
@@ -622,7 +726,7 @@ async def approve_document(
         project_id=document.project_id,
     )
 
-    # Notify the uploader
+    # Notify the uploader (in-app)
     if document.uploaded_by and document.uploaded_by != str(current_user.id):
         await NotificationService.notify_user(
             db=db,
@@ -635,6 +739,26 @@ async def approve_document(
 
     await db.commit()
     await db.refresh(document)
+
+    # Email the uploader (non-blocking)
+    try:
+        from app.services.email_service import EmailService
+        from sqlalchemy import select as sa_select
+        from app.models.user import User as UserModel
+        if document.uploaded_by:
+            res = await db.execute(sa_select(UserModel).where(UserModel.id == document.uploaded_by))
+            uploader = res.scalar_one_or_none()
+            if uploader:
+                await EmailService.send_document_approved(
+                    to_email=str(uploader.email),
+                    to_name=str(uploader.full_name),
+                    document_title=document.title,
+                    document_id=str(document.id),
+                    reviewer_name=str(current_user.full_name),
+                )
+    except Exception as e:
+        print(f"[Email] Approval email failed: {e}")
+
     return DocumentResponse.model_validate(document)
 
 
@@ -698,41 +822,28 @@ async def reject_document(
 
     await db.commit()
     await db.refresh(document)
+
+    # Email the uploader (non-blocking)
+    try:
+        from app.services.email_service import EmailService
+        from sqlalchemy import select as sa_select
+        from app.models.user import User as UserModel
+        if document.uploaded_by:
+            res = await db.execute(sa_select(UserModel).where(UserModel.id == document.uploaded_by))
+            uploader = res.scalar_one_or_none()
+            if uploader:
+                await EmailService.send_document_rejected(
+                    to_email=str(uploader.email),
+                    to_name=str(uploader.full_name),
+                    document_title=document.title,
+                    document_id=str(document.id),
+                    reviewer_name=str(current_user.full_name),
+                    reason=reason,
+                )
+    except Exception as e:
+        print(f"[Email] Rejection email failed: {e}")
+
     return DocumentResponse.model_validate(document)
-
-
-@router.get("/pending-review", response_model=List[DocumentResponse])
-async def get_pending_review_documents(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get all documents currently in review status that the user needs to action"""
-    from sqlalchemy import select
-    from app.models.document import Document, document_reviewers as dr_table
-
-    # Find documents in 'review' status where user is a reviewer OR user is admin
-    if current_user.role == "ADMIN":
-        stmt = (
-            select(Document)
-            .where(Document.status == "review")
-            .order_by(Document.updated_at.desc())
-            .limit(20)
-        )
-    else:
-        stmt = (
-            select(Document)
-            .join(dr_table, dr_table.c.document_id == Document.id)
-            .where(
-                Document.status == "review",
-                dr_table.c.user_id == str(current_user.id)
-            )
-            .order_by(Document.updated_at.desc())
-            .limit(20)
-        )
-
-    result = await db.execute(stmt)
-    documents = result.scalars().unique().all()
-    return [DocumentResponse.model_validate(d) for d in documents]
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

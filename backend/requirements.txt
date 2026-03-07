@@ -42,3 +42,6 @@ sentence-transformers==5.1.2
 
 # Optional: OpenAI for AI Chat (set OPENAI_API_KEY env var to enable)
 openai==1.86.0
+
+# Email via Resend (set RESEND_API_KEY env var to enable)
+resend==2.10.0

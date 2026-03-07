@@ -18,6 +18,8 @@ const AdminUsers = lazy(() => import('./pages/AdminUsers'))
 const AdminSettings = lazy(() => import('./pages/AdminSettings'))
 const Settings = lazy(() => import('./pages/Settings'))
 const KnowledgeBase = lazy(() => import('./pages/KnowledgeBase'))
+const ReviewQueue = lazy(() => import('./pages/ReviewQueue'))
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'))
 
 // Loading fallback component
 function PageLoader() {
@@ -65,6 +67,7 @@ function App() {
           path="/reset-password"
           element={isAuthenticated ? <Navigate to="/" replace /> : <ResetPassword />}
         />
+        <Route path="/verify-email" element={<VerifyEmail />} />
 
         {/* Protected Routes with Layout */}
         <Route
@@ -79,6 +82,7 @@ function App() {
           <Route path="projects" element={<Projects />} />
           <Route path="projects/:id" element={<ProjectDetail />} />
           <Route path="documents/:id" element={<DocumentDetail />} />
+          <Route path="reviews" element={<ReviewQueue />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="knowledge-base" element={<KnowledgeBase />} />
           <Route path="settings" element={<Settings />} />

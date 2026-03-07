@@ -3,7 +3,7 @@
 # ============================================
 from typing import Optional, List, Dict, Any
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, and_
 from app.crud.base import CRUDBase
@@ -110,7 +110,7 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         """Update user's last activity timestamp."""
         user = await self.get(db, id=user_id)
         if user:
-            user.last_activity = datetime.utcnow()  # type: ignore
+            user.last_activity = datetime.now(timezone.utc)  # type: ignore
             await db.flush()
             return True
         return False
@@ -119,7 +119,7 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         self, db: AsyncSession, *, threshold_minutes: int = ONLINE_THRESHOLD_MINUTES
     ) -> List[Dict[str, Any]]:
         """Get users who were active within the threshold."""
-        threshold_time = datetime.utcnow() - timedelta(minutes=threshold_minutes)
+        threshold_time = datetime.now(timezone.utc) - timedelta(minutes=threshold_minutes)
 
         stmt = (
             select(User)
@@ -156,7 +156,7 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         threshold_minutes: int = ONLINE_THRESHOLD_MINUTES
     ) -> List[Dict[str, Any]]:
         """Get all active users with their online status."""
-        threshold_time = datetime.utcnow() - timedelta(minutes=threshold_minutes)
+        threshold_time = datetime.now(timezone.utc) - timedelta(minutes=threshold_minutes)
 
         stmt = (
             select(User)

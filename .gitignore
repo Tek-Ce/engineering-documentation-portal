@@ -15,11 +15,15 @@ ehthumbs.db
 Thumbs.db
 Desktop.ini
 
-# Environment Variables
+# Environment Variables — never commit secrets
 .env
 .env.local
 .env.*.local
 *.env
+.env.production
+certbot/
+backend/.env
+backend/.env.*
 
 # Logs
 *.log
@@ -39,10 +43,25 @@ logs/
 # Database dumps
 *.sql
 
-# Documents (keep in docs/ but ignore in root)
-/*.pdf
-/*.docx
-/*.doc
+# Documents — never commit (all directories, all formats)
+# README.md files are the only docs allowed
+**/*.pdf
+**/*.docx
+**/*.doc
+**/*.xls
+**/*.xlsx
+**/*.ppt
+**/*.pptx
+**/*.csv
+**/*.odt
+**/*.ods
+**/*.odp
+scripts/uploads/
+uploads/
+
+# Auto-generated codebase docs (not README)
+docs/files/
+docs/CODEBASE_FILES.md
 
 # Old/legacy directories
 frontend/

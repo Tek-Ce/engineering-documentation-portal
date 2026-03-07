@@ -1,4 +1,5 @@
 from logging.config import fileConfig
+import os
 import sys
 from pathlib import Path
 
@@ -22,6 +23,17 @@ from app.models.notification import Notification
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+# Override sqlalchemy.url from DATABASE_URL env var if set.
+# Alembic uses the sync pymysql driver, so replace aiomysql with pymysql.
+_db_url = os.getenv("DATABASE_URL", "")
+if _db_url:
+    if _db_url.startswith("mysql://"):
+        _db_url = "mysql+pymysql://" + _db_url[len("mysql://"):]
+    elif _db_url.startswith("mysql+aiomysql://"):
+        _db_url = "mysql+pymysql://" + _db_url[len("mysql+aiomysql://"):]
+    # %% escapes % for configparser interpolation (e.g. %40 in passwords)
+    config.set_main_option("sqlalchemy.url", _db_url.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

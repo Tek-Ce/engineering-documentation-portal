@@ -264,6 +264,7 @@ function DocumentDetail() {
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [zoomLevel, setZoomLevel] = useState(100)
+  const [activityExpanded, setActivityExpanded] = useState(false)
 
   // Check if current user is default admin or document owner
   const isDefaultAdmin = useAuthStore((state) => state.isDefaultAdmin())
@@ -287,6 +288,15 @@ function DocumentDetail() {
     queryFn: () => documentsAPI.getVersions(id),
     enabled: !!document,
   })
+
+  // Fetch document activity (for history and last rejection reason)
+  const { data: activityData } = useQuery({
+    queryKey: ['document-activity', id],
+    queryFn: () => documentsAPI.getActivity(id, 30),
+    enabled: !!document,
+  })
+  const activityLogs = activityData?.logs ?? []
+  const lastRejection = activityLogs.find(log => log.action === 'DOCUMENT_REJECTED')
 
   // Approval workflow mutations
   const submitForReviewMutation = useMutation({
@@ -474,7 +484,23 @@ function DocumentDetail() {
         </div>
       </div>
 
-      {/* File Preview Section - Top Priority */}
+      {/* Last rejection reason (when document is back in draft) */}
+      {document.status === 'draft' && lastRejection?.description && (
+        <div className="mb-4 sm:mb-6 p-4 rounded-xl border border-red-200 bg-red-50">
+          <div className="flex items-start gap-3">
+            <XCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-semibold text-red-800 text-sm mb-1">Last rejection</h3>
+              <p className="text-sm text-red-700">{lastRejection.description}</p>
+              {lastRejection.user_name && (
+                <p className="text-xs text-red-600 mt-1">By {lastRejection.user_name}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* File Preview Section - Expanded */}
       <div className="bg-white rounded-2xl border border-surface-200 overflow-hidden mb-4 sm:mb-6">
         <div className="border-b border-surface-100 p-3 sm:p-4 bg-surface-50">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -493,6 +519,15 @@ function DocumentDetail() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsPreviewModalOpen(true)}
+                className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-primary-50 text-primary-700 font-medium text-sm rounded-lg hover:bg-primary-100 transition-colors border border-primary-200"
+              >
+                <Eye size={14} className="sm:hidden" />
+                <Eye size={16} className="hidden sm:inline" />
+                <span>Full screen</span>
+              </button>
               <a
                 href={documentsAPI.download(document.id)}
                 download
@@ -506,11 +541,11 @@ function DocumentDetail() {
           </div>
         </div>
 
-        {/* Document Preview */}
+        {/* Document Preview - Expanded height */}
         <div className="p-4 sm:p-6">
           {/* Zoom Controls */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 mb-4 bg-surface-50 p-3 rounded-lg">
-            <span className="text-xs sm:text-sm font-medium text-surface-700">Preview Zoom</span>
+            <span className="text-xs sm:text-sm font-medium text-surface-700">Preview</span>
             <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto justify-between sm:justify-start">
               <button
                 onClick={() => setZoomLevel(prev => Math.max(50, prev - 10))}
@@ -548,14 +583,14 @@ function DocumentDetail() {
             // Use client helper so we don't accidentally duplicate /api/v1
             const downloadUrl = documentsAPI.download(document.id)
 
-            // PDF Preview
+            // PDF Preview - 3/4 of screen (75vh)
             if (fileExt === 'pdf') {
               return (
-                <div className="w-full h-[500px] sm:h-[600px] border border-surface-200 rounded-lg overflow-auto bg-surface-50">
+                <div className="w-full min-h-[75vh] h-[75vh] border border-surface-200 rounded-lg overflow-auto bg-surface-50">
                   <div style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top left', width: `${10000 / zoomLevel}%` }}>
                     <iframe
                       src={downloadUrl}
-                      className="w-full h-[500px] sm:h-[600px]"
+                      className="w-full min-h-[75vh] h-[75vh]"
                       title="PDF Preview"
                     />
                   </div>
@@ -563,10 +598,10 @@ function DocumentDetail() {
               )
             }
 
-            // DOCX/DOC Preview using Google Docs Viewer
+            // DOCX/DOC
             if (['docx', 'doc'].includes(fileExt)) {
               return (
-                <div className="w-full h-[500px] sm:h-[600px] border border-surface-200 rounded-lg bg-surface-50 flex flex-col items-center justify-center p-6">
+                <div className="w-full min-h-[75vh] border border-surface-200 rounded-lg bg-surface-50 flex flex-col items-center justify-center p-6">
                   <FileText size={64} className="text-surface-300 mb-4" />
                   <h3 className="text-lg font-semibold text-surface-700 mb-2">Word Document Preview</h3>
                   <p className="text-sm text-surface-500 text-center mb-6 max-w-md">
@@ -592,24 +627,24 @@ function DocumentDetail() {
               )
             }
 
-            // Image Preview
+            // Image Preview - 3/4 of screen
             if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(fileExt)) {
               return (
-                <div className="w-full max-h-[600px] border border-surface-200 rounded-lg overflow-auto bg-surface-50 flex items-center justify-center p-4">
+                <div className="w-full min-h-[75vh] h-[75vh] border border-surface-200 rounded-lg overflow-auto bg-surface-50 flex items-center justify-center p-4">
                   <img
                     src={downloadUrl}
                     alt={document.title}
                     style={{ transform: `scale(${zoomLevel / 100})` }}
-                    className="max-w-full max-h-[560px] object-contain transition-transform"
+                    className="max-w-full max-h-[75vh] object-contain transition-transform"
                   />
                 </div>
               )
             }
 
-            // Text / Markdown Preview
+            // Text / Markdown Preview - 3/4 of screen
             if (['md', 'markdown', 'txt', 'csv', 'log', 'ini', 'json', 'yaml', 'yml'].includes(fileExt)) {
               return (
-                <div className="w-full border border-surface-200 rounded-lg overflow-hidden bg-white p-4">
+                <div className="w-full min-h-[75vh] h-[75vh] border border-surface-200 rounded-lg overflow-auto bg-white p-4 sm:p-6">
                   <FileContentViewer downloadUrl={downloadUrl} fileExt={fileExt} />
                 </div>
               )
@@ -617,7 +652,7 @@ function DocumentDetail() {
 
             // No preview available
             return (
-              <div className="w-full h-[400px] border border-surface-200 rounded-lg bg-surface-50 flex flex-col items-center justify-center p-6 text-center">
+              <div className="w-full min-h-[75vh] border border-surface-200 rounded-lg bg-surface-50 flex flex-col items-center justify-center p-6 text-center">
                 <FileText size={64} className="text-surface-300 mb-4" />
                 <h3 className="text-lg font-semibold text-surface-700 mb-2">Preview Not Available</h3>
                 <p className="text-sm text-surface-500 mb-4">{document.file_name}</p>
@@ -633,6 +668,47 @@ function DocumentDetail() {
           </p>
         </div>
       </div>
+
+      {/* Document Activity / History */}
+      {activityLogs.length > 0 && (
+        <div className="bg-white rounded-2xl border border-surface-200 overflow-hidden mb-4 sm:mb-6">
+          <button
+            type="button"
+            onClick={() => setActivityExpanded((v) => !v)}
+            className="w-full flex items-center justify-between p-4 sm:p-5 text-left hover:bg-surface-50 transition-colors"
+          >
+            <span className="flex items-center gap-2 font-semibold text-surface-900">
+              <History size={20} className="text-surface-500" />
+              Activity
+            </span>
+            <span className="text-sm text-surface-500">
+              {activityExpanded ? 'Collapse' : `${activityLogs.length} entries`}
+            </span>
+          </button>
+          {activityExpanded && (
+            <div className="border-t border-surface-100 max-h-64 overflow-y-auto">
+              <ul className="divide-y divide-surface-100">
+                {activityLogs.map((log) => (
+                  <li key={log.id} className="p-4 sm:px-5 py-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="font-medium text-surface-700">{log.action.replace(/_/g, ' ')}</span>
+                      {log.user_name && (
+                        <span className="text-surface-500">by {log.user_name}</span>
+                      )}
+                      <span className="text-surface-400">
+                        {log.created_at && formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}
+                      </span>
+                    </div>
+                    {log.description && (
+                      <p className="mt-1 text-surface-600">{log.description}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Comments Section - Below Preview */}
       <div className="mb-6">
@@ -652,7 +728,7 @@ function DocumentDetail() {
         >
           <div className="absolute inset-0 bg-surface-900/60 backdrop-blur-sm" onClick={() => setIsPreviewModalOpen(false)} />
 
-          <div className="relative w-full max-w-6xl h-[90vh] sm:h-[85vh] bg-white rounded-lg sm:rounded-2xl shadow-modal overflow-hidden animate-scale-in flex flex-col" tabIndex={-1}>
+          <div className="relative w-full max-w-[95vw] sm:max-w-6xl h-[75vh] bg-white rounded-lg sm:rounded-2xl shadow-modal overflow-hidden animate-scale-in flex flex-col" tabIndex={-1}>
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-surface-100 gap-2">
               <h3 id="preview-title" className="font-semibold text-sm sm:text-base truncate max-w-full sm:max-w-md">Preview — {document.title}</h3>
               <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
@@ -710,9 +786,9 @@ function DocumentDetail() {
 
                     if (fileExt === 'pdf') {
                       return (
-                        <div className="w-full h-full overflow-auto">
+                        <div className="w-full h-full min-h-[75vh] overflow-auto">
                           <div style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top left', width: `${10000 / zoomLevel}%` }}>
-                            <iframe src={downloadUrl} title="PDF Preview" className="w-full h-full min-h-[600px] border rounded-lg" />
+                            <iframe src={downloadUrl} title="PDF Preview" className="w-full min-h-[75vh] border rounded-lg" />
                           </div>
                         </div>
                       )

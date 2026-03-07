@@ -13,7 +13,10 @@ import {
   FileText,
   FolderKanban,
   Clock,
-  Loader2
+  Loader2,
+  Eye,
+  CheckCircle,
+  XCircle
 } from 'lucide-react'
 import { notificationsAPI } from '../api/client'
 import { formatDistanceToNow, format } from 'date-fns'
@@ -22,28 +25,43 @@ import clsx from 'clsx'
 // Notification Item
 function NotificationItem({ notification, onMarkRead, onDelete, onOpen }) {
   const typeConfig = {
-    DOCUMENT_UPLOAD: { 
-      icon: Upload, 
+    DOCUMENT_UPLOAD: {
+      icon: Upload,
       color: 'bg-primary-500',
       label: 'Document'
     },
-    COMMENT: { 
-      icon: MessageSquare, 
+    COMMENT: {
+      icon: MessageSquare,
       color: 'bg-accent-amber',
       label: 'Comment'
     },
-    MENTION: { 
-      icon: AtSign, 
+    MENTION: {
+      icon: AtSign,
       color: 'bg-accent-cyan',
       label: 'Mention'
     },
-    PROJECT: { 
-      icon: FolderKanban, 
+    PROJECT: {
+      icon: FolderKanban,
       color: 'bg-accent-green',
       label: 'Project'
     },
-    default: { 
-      icon: Bell, 
+    DOCUMENT_REVIEW_REQUESTED: {
+      icon: Eye,
+      color: 'bg-amber-500',
+      label: 'Review requested'
+    },
+    DOCUMENT_APPROVED: {
+      icon: CheckCircle,
+      color: 'bg-accent-green',
+      label: 'Approved'
+    },
+    DOCUMENT_REJECTED: {
+      icon: XCircle,
+      color: 'bg-red-500',
+      label: 'Rejected'
+    },
+    default: {
+      icon: Bell,
       color: 'bg-surface-400',
       label: 'Notification'
     },

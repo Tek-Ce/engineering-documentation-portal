@@ -21,16 +21,20 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """
     Add FULLTEXT index support to kb_chunks table.
-    
+
     Changes:
     1. Add chunk_text_fts column for FULLTEXT indexing
     2. Create FULLTEXT index on chunk_text_fts
     3. Add composite indexes for common queries
     """
-    
-    # Check if column exists first
+
     conn = op.get_bind()
     inspector = sa.inspect(conn)
+
+    # Skip entirely if kb_chunks table doesn't exist yet
+    if 'kb_chunks' not in inspector.get_table_names():
+        return
+
     columns = [col['name'] for col in inspector.get_columns('kb_chunks')]
     
     # Add chunk_text_fts column if not exists

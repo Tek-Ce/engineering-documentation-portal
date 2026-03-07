@@ -53,18 +53,18 @@ function ContentPreviewModal({ result, query, onClose, onAskAI }) {
       />
 
       {/* Modal */}
-      <div className="fixed inset-4 md:inset-10 lg:inset-20 bg-white rounded-2xl shadow-2xl z-50 flex flex-col animate-slide-up overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-surface-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center">
-              <FileText size={20} className="text-primary-600" />
+      <div className="fixed inset-2 sm:inset-4 md:inset-10 lg:inset-20 bg-white rounded-xl sm:rounded-2xl shadow-2xl z-50 flex flex-col animate-slide-up overflow-hidden">
+        {/* Header - responsive */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-surface-200">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
+              <FileText size={18} className="text-primary-600 sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <h2 className="font-semibold text-surface-900">
+            <div className="min-w-0">
+              <h2 className="font-semibold text-surface-900 truncate text-sm sm:text-base">
                 {result.document_title || 'Document Content'}
               </h2>
-              <p className="text-xs text-surface-500">
+              <p className="text-xs text-surface-500 truncate">
                 {result.project_name && `${result.project_name} • `}
                 Chunk {(result.chunk_index || 0) + 1}
                 {result.file_name && ` • ${result.file_name}`}
@@ -72,7 +72,7 @@ function ContentPreviewModal({ result, query, onClose, onAskAI }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleCopy}
               className="flex items-center gap-2 px-3 py-2 text-sm text-surface-600 hover:bg-surface-100 rounded-lg transition-colors"
@@ -223,7 +223,7 @@ function AIChatPanel({ context, query, onClose }) {
   }
 
   return (
-    <div className="fixed right-0 top-0 bottom-0 w-full md:w-[450px] bg-white shadow-2xl z-50 flex flex-col animate-slide-left">
+    <div className="fixed right-0 top-0 bottom-0 w-full max-w-[100vw] sm:w-[400px] md:w-[450px] bg-white shadow-2xl z-50 flex flex-col animate-slide-left">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-surface-200 bg-gradient-to-r from-primary-500 to-primary-600">
         <div className="flex items-center gap-3 text-white">
@@ -340,9 +340,9 @@ function SearchResultItem({ result, query, onClick }) {
   return (
     <div
       onClick={() => onClick(result)}
-      className="block bg-white rounded-xl border border-surface-200 p-5 hover:shadow-hover hover:border-surface-300 transition-all duration-200 group cursor-pointer"
+      className="block bg-white rounded-xl border border-surface-200 p-4 sm:p-5 hover:shadow-hover hover:border-surface-300 transition-all duration-200 group cursor-pointer min-w-0"
     >
-      <div className="flex items-start gap-4">
+      <div className="flex items-start gap-3 sm:gap-4 min-w-0">
         {/* Icon */}
         <div className={clsx(
           'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
@@ -435,13 +435,13 @@ function SearchResultItem({ result, query, onClick }) {
 // Stats Card Component
 function StatsCard({ icon: Icon, label, value, color }) {
   return (
-    <div className="bg-white rounded-xl border border-surface-200 p-4 flex items-center gap-3">
-      <div className={clsx('w-10 h-10 rounded-lg flex items-center justify-center', color)}>
-        <Icon size={20} className="text-white" />
+    <div className="bg-white rounded-xl border border-surface-200 p-3 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0">
+      <div className={clsx('w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center flex-shrink-0', color)}>
+        <Icon size={18} className="text-white sm:w-5 sm:h-5" />
       </div>
-      <div>
-        <p className="text-2xl font-bold text-surface-900">{value}</p>
-        <p className="text-xs text-surface-500">{label}</p>
+      <div className="min-w-0">
+        <p className="text-xl sm:text-2xl font-bold text-surface-900 truncate">{value}</p>
+        <p className="text-xs text-surface-500 truncate">{label}</p>
       </div>
     </div>
   )
@@ -536,20 +536,20 @@ function KnowledgeBase() {
   const searchTime = searchResults?.search_time_ms || 0
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-surface-900 flex items-center gap-3">
-            <Brain className="text-primary-500" />
-            Knowledge Base
+    <div className="w-full max-w-5xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6 animate-fade-in">
+      {/* Header - stacks on small screens */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-surface-900 flex items-center gap-2 sm:gap-3 truncate">
+            <Brain className="text-primary-500 flex-shrink-0" size={28} />
+            <span className="truncate">Knowledge Base</span>
           </h1>
-          <p className="text-surface-500 mt-1">
+          <p className="text-surface-500 mt-1 text-sm sm:text-base">
             AI-powered semantic search across all your documentation
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setShowAIChat(true)}
             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg hover:from-primary-600 hover:to-primary-700 transition-all text-sm font-medium shadow-sm"
@@ -578,9 +578,9 @@ function KnowledgeBase() {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats - responsive grid */}
       {kbStats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <StatsCard
             icon={FolderKanban}
             label="Indexed Projects"
@@ -608,14 +608,13 @@ function KnowledgeBase() {
         </div>
       )}
 
-      {/* Search Box */}
-      <div className="bg-white rounded-2xl border border-surface-200 p-6 shadow-card">
-        {/* Main Search Input */}
+      {/* Search Box - responsive padding and input */}
+      <div className="bg-white rounded-xl sm:rounded-2xl border border-surface-200 p-4 sm:p-6 shadow-card">
         <div className="relative">
           <Search
-            size={20}
+            size={18}
             className={clsx(
-              'absolute left-4 top-1/2 -translate-y-1/2 transition-colors',
+              'absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 transition-colors flex-shrink-0',
               searchQuery ? 'text-primary-500' : 'text-surface-400'
             )}
           />
@@ -623,27 +622,26 @@ function KnowledgeBase() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search documentation... (AI-powered)"
-            className="w-full h-14 pl-12 pr-4 bg-surface-50 border border-surface-200 rounded-xl text-lg placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all"
+            placeholder="Search documentation..."
+            className="w-full h-12 sm:h-14 pl-10 sm:pl-12 pr-10 sm:pr-12 text-base sm:text-lg bg-surface-50 border border-surface-200 rounded-xl placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all"
             autoFocus
           />
           {isFetching && (
-            <Loader2 size={20} className="absolute right-4 top-1/2 -translate-y-1/2 text-primary-500 animate-spin" />
+            <Loader2 size={18} className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 text-primary-500 animate-spin" />
           )}
         </div>
 
-        {/* Filter Toggle */}
-        <div className="flex items-center justify-between mt-4">
+        {/* Filter row - stacks on small screens */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4">
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center gap-2 text-sm text-surface-600 hover:text-surface-900 transition-colors"
+            className="flex items-center gap-2 text-sm text-surface-600 hover:text-surface-900 transition-colors self-start"
           >
             <Filter size={16} />
             {showFilters ? 'Hide Filters' : 'Show Filters'}
           </button>
 
-          {/* Search Mode Toggles */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -667,9 +665,8 @@ function KnowledgeBase() {
           </div>
         </div>
 
-        {/* Filters Panel */}
         {showFilters && (
-          <div className="mt-4 pt-4 border-t border-surface-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="mt-4 pt-4 border-t border-surface-100 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             {/* Project Filter */}
             <div>
               <label className="block text-sm font-medium text-surface-700 mb-1.5">
@@ -693,10 +690,9 @@ function KnowledgeBase() {
       </div>
 
       {/* Results */}
-      <div className="space-y-4">
-        {/* Results Header */}
+      <div className="space-y-3 sm:space-y-4">
         {debouncedQuery.length >= 2 && (
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <p className="text-sm text-surface-500">
               {isSearching ? (
                 'Searching...'
@@ -750,15 +746,15 @@ function KnowledgeBase() {
             ))}
           </div>
         ) : debouncedQuery.length >= 2 ? (
-          <div className="bg-white rounded-2xl border border-surface-200 p-12 text-center">
-            <Search size={48} className="mx-auto text-surface-300 mb-4" />
-            <h3 className="font-semibold text-surface-700 mb-2">No results found</h3>
-            <p className="text-surface-500 text-sm max-w-md mx-auto">
+          <div className="bg-white rounded-xl sm:rounded-2xl border border-surface-200 p-8 sm:p-12 text-center">
+            <Search size={40} className="mx-auto text-surface-300 mb-4 sm:w-12 sm:h-12" />
+            <h3 className="font-semibold text-surface-700 mb-2 text-base sm:text-lg">No results found</h3>
+            <p className="text-surface-500 text-sm max-w-md mx-auto px-2">
               Try adjusting your search terms or filters. Make sure documents are indexed in the Knowledge Base.
             </p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-surface-200 p-12 text-center">
+          <div className="bg-white rounded-xl sm:rounded-2xl border border-surface-200 p-8 sm:p-12 text-center">
             <Brain size={48} className="mx-auto text-primary-300 mb-4" />
             <h3 className="font-semibold text-surface-700 mb-2">Search your documentation</h3>
             <p className="text-surface-500 text-sm max-w-md mx-auto">

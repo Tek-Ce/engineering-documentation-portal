@@ -2,7 +2,7 @@
 Admin-only endpoints for system management
 """
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, select
@@ -108,6 +108,7 @@ async def get_activity_logs(
     limit: int = Query(50, ge=1, le=200),
     user_id: Optional[str] = Query(None),
     project_id: Optional[str] = Query(None),
+    resource_id: Optional[str] = Query(None),
     action: Optional[str] = Query(None),
     resource_type: Optional[str] = Query(None),
     date_from: Optional[datetime] = Query(None),
@@ -122,6 +123,7 @@ async def get_activity_logs(
         limit=limit,
         user_id=user_id,
         project_id=project_id,
+        resource_id=resource_id,
         action=action,
         resource_type=resource_type,
         date_from=date_from,
@@ -132,7 +134,9 @@ async def get_activity_logs(
         db,
         user_id=user_id,
         project_id=project_id,
+        resource_id=resource_id,
         action=action,
+        resource_type=resource_type,
         date_from=date_from,
         date_to=date_to
     )
@@ -219,7 +223,7 @@ async def heartbeat(
     """Update user's last activity timestamp. Call this periodically from frontend."""
     await crud_user.update_activity(db, user_id=str(current_user.id))
     await db.commit()
-    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 # ============================================

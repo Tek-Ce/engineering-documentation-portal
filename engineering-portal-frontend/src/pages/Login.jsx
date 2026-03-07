@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { useMutation } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { Eye, EyeOff, Hexagon, Loader2, ArrowRight } from 'lucide-react'
+import { Eye, EyeOff, Hexagon, Loader2, ArrowRight, MailWarning } from 'lucide-react'
 import { authAPI } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 
@@ -11,15 +11,29 @@ function Login() {
   const navigate = useNavigate()
   const { setAuth } = useAuthStore()
   const [showPassword, setShowPassword] = useState(false)
+  const [unverifiedEmail, setUnverifiedEmail] = useState(null)
+  const [resendSent, setResendSent] = useState(false)
 
   const {
     register,
     handleSubmit,
+    getValues,
     formState: { errors },
   } = useForm({
     defaultValues: {
       email: '',
       password: '',
+    },
+  })
+
+  const resendMutation = useMutation({
+    mutationFn: (email) => authAPI.resendVerification(email),
+    onSuccess: () => {
+      setResendSent(true)
+      toast.success('Verification email sent — check your inbox.')
+    },
+    onError: () => {
+      toast.error('Could not send verification email. Try again later.')
     },
   })
 
@@ -31,7 +45,12 @@ function Login() {
       navigate('/')
     },
     onError: (error) => {
-      toast.error(error.response?.data?.detail || 'Login failed. Please try again.')
+      if (error.response?.data?.detail === 'EMAIL_NOT_VERIFIED') {
+        setUnverifiedEmail(getValues('email'))
+        setResendSent(false)
+      } else {
+        toast.error(error.response?.data?.detail || 'Login failed. Please try again.')
+      }
     },
   })
 
@@ -100,6 +119,33 @@ function Login() {
             <h2 className="text-2xl font-bold text-surface-900 mb-2">Welcome back</h2>
             <p className="text-surface-500">Sign in to your account to continue</p>
           </div>
+
+          {/* Email Not Verified Banner */}
+          {unverifiedEmail && (
+            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+              <div className="flex gap-3">
+                <MailWarning size={20} className="text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-amber-800">Email not verified</p>
+                  <p className="text-sm text-amber-700 mt-0.5">
+                    Please verify <span className="font-mono font-semibold">{unverifiedEmail}</span> before signing in.
+                  </p>
+                  {resendSent ? (
+                    <p className="text-sm text-amber-600 mt-2 font-medium">Email sent — check your inbox.</p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => resendMutation.mutate(unverifiedEmail)}
+                      disabled={resendMutation.isPending}
+                      className="mt-2 text-sm font-medium text-amber-800 underline hover:text-amber-900 disabled:opacity-50"
+                    >
+                      {resendMutation.isPending ? 'Sending...' : 'Resend verification email'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">

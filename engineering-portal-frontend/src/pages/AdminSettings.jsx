@@ -37,7 +37,7 @@ function AdminSettings() {
 
   // Activity logs state
   const [logsPage, setLogsPage] = useState(0)
-  const [logsFilter, setLogsFilter] = useState({ action: '', user_id: '' })
+  const [logsFilter, setLogsFilter] = useState({ action: '', user_id: '', resource_type: '' })
 
   // Check if user is admin
   if (user?.role !== 'ADMIN') {
@@ -65,6 +65,14 @@ function AdminSettings() {
     enabled: activeTab === 'projects',
   })
 
+  // Fetch users list for activity log filter
+  const { data: filterUsersData } = useQuery({
+    queryKey: ['all-users-admin'],
+    queryFn: () => usersAPI.list(),
+    enabled: activeTab === 'activity',
+  })
+  const filterUsers = filterUsersData?.users || []
+
   // Fetch activity logs (admin only)
   const { data: activityLogsData, isLoading: logsLoading, refetch: refetchLogs } = useQuery({
     queryKey: ['activity-logs', logsPage, logsFilter],
@@ -72,7 +80,8 @@ function AdminSettings() {
       skip: logsPage * 50,
       limit: 50,
       ...(logsFilter.action && { action: logsFilter.action }),
-      ...(logsFilter.user_id && { user_id: logsFilter.user_id })
+      ...(logsFilter.user_id && { user_id: logsFilter.user_id }),
+      ...(logsFilter.resource_type && { resource_type: logsFilter.resource_type }),
     }),
     enabled: activeTab === 'activity',
   })
@@ -218,10 +227,10 @@ function AdminSettings() {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs - scrollable on mobile */}
       <div className="bg-white rounded-xl border border-surface-200">
-        <div className="border-b border-surface-200">
-          <div className="flex gap-1 p-2">
+        <div className="border-b border-surface-200 overflow-x-auto">
+          <div className="flex gap-1 p-2 min-w-max sm:min-w-0">
             {tabs.map((tab) => {
               const Icon = tab.icon
               return (
@@ -607,11 +616,11 @@ function AdminSettings() {
 
               {/* Filters */}
               <div className="flex flex-wrap gap-3 items-center bg-surface-50 p-4 rounded-lg">
-                <Filter size={18} className="text-surface-500" />
+                <Filter size={18} className="text-surface-500 flex-shrink-0" />
                 <select
                   value={logsFilter.action}
                   onChange={(e) => {
-                    setLogsFilter({ ...logsFilter, action: e.target.value })
+                    setLogsFilter((f) => ({ ...f, action: e.target.value }))
                     setLogsPage(0)
                   }}
                   className="px-3 py-2 border border-surface-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
@@ -621,13 +630,39 @@ function AdminSettings() {
                     <option key={action} value={action}>{action}</option>
                   ))}
                 </select>
-                {logsFilter.action && (
+                <select
+                  value={logsFilter.resource_type}
+                  onChange={(e) => {
+                    setLogsFilter((f) => ({ ...f, resource_type: e.target.value }))
+                    setLogsPage(0)
+                  }}
+                  className="px-3 py-2 border border-surface-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">All Resources</option>
+                  {activityStats?.resource_types?.map((rt) => (
+                    <option key={rt} value={rt}>{rt}</option>
+                  ))}
+                </select>
+                <select
+                  value={logsFilter.user_id}
+                  onChange={(e) => {
+                    setLogsFilter((f) => ({ ...f, user_id: e.target.value }))
+                    setLogsPage(0)
+                  }}
+                  className="px-3 py-2 border border-surface-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 min-w-[140px]"
+                >
+                  <option value="">All Users</option>
+                  {filterUsers.map((u) => (
+                    <option key={u.id} value={u.id}>{u.full_name || u.email}</option>
+                  ))}
+                </select>
+                {(logsFilter.action || logsFilter.user_id || logsFilter.resource_type) && (
                   <button
                     onClick={() => {
-                      setLogsFilter({ action: '', user_id: '' })
+                      setLogsFilter({ action: '', user_id: '', resource_type: '' })
                       setLogsPage(0)
                     }}
-                    className="px-3 py-2 text-sm text-surface-600 hover:text-surface-900"
+                    className="px-3 py-2 text-sm text-primary-600 hover:text-primary-800 font-medium"
                   >
                     Clear Filters
                   </button>

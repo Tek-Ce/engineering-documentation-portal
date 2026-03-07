@@ -19,8 +19,9 @@ import secrets
 
 router = APIRouter()
 
-# In-memory token store (for production, use Redis or database)
-reset_tokens = {}
+# In-memory token stores (for production, use Redis or database)
+reset_tokens: dict = {}
+verification_tokens: dict = {}  # token → user email
 
 class PasswordResetRequest(BaseModel):
     email: EmailStr
@@ -54,6 +55,12 @@ async def login(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is inactive"
+        )
+
+    if not bool(user.is_email_verified):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="EMAIL_NOT_VERIFIED"
         )
     
     # Create JWT access token
@@ -133,30 +140,29 @@ async def forgot_password(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Request password reset
-
-    Generates a reset token for the user.
-    In production, this would send an email with the token.
+    Request password reset — sends a secure reset link via Resend email.
+    Always returns the same message to avoid revealing whether an email exists.
     """
     user = await crud_user.get_by_email(db, email=request.email)
 
-    if not user:
-        # Don't reveal if user exists for security
-        return {"message": "If the email exists, a reset token has been generated"}
+    if user:
+        # Generate secure random token
+        token = secrets.token_urlsafe(32)
+        reset_tokens[token] = str(user.email)
 
-    # Generate secure random token
-    token = secrets.token_urlsafe(32)
+        # Send email via Resend (fire-and-forget — don't fail if email fails)
+        try:
+            from app.services.email_service import EmailService
+            await EmailService.send_password_reset(
+                to_email=str(user.email),
+                to_name=str(user.full_name),
+                reset_token=token,
+            )
+        except Exception as e:
+            # Log but don't expose error to client
+            print(f"[Auth] Email send failed for {request.email}: {e}")
 
-    # Store token with user email (expires in 1 hour in production)
-    reset_tokens[token] = str(user.email)
-
-    # In production, send email with reset link
-    # For now, return token for testing
-    return {
-        "message": "Password reset token generated",
-        "token": token,  # Remove this in production
-        "note": "In production, this token would be sent via email"
-    }
+    return {"message": "If that email is registered, a password reset link has been sent."}
 
 @router.post("/reset-password")
 async def reset_password(
@@ -196,3 +202,68 @@ async def reset_password(
     del reset_tokens[request.token]
 
     return {"message": "Password reset successfully"}
+
+
+@router.get("/verify-email")
+async def verify_email(
+    token: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Verify a user's email address via the link sent in the welcome email.
+    Marks the account as verified so they can log in.
+    """
+    email = verification_tokens.get(token)
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification link. Please ask your admin to resend the invitation."
+        )
+
+    user = await crud_user.get_by_email(db, email=email)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if bool(user.is_email_verified):
+        del verification_tokens[token]
+        return {"message": "Email already verified. You can now log in."}
+
+    await db.execute(
+        update(User)
+        .where(User.id == user.id)
+        .values(is_email_verified=True, is_active=True)
+    )
+    await db.commit()
+
+    # Consume the token
+    del verification_tokens[token]
+
+    return {"message": "Email verified successfully! You can now log in."}
+
+
+@router.post("/resend-verification")
+async def resend_verification(
+    request: PasswordResetRequest,   # reuse the {email} schema
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Resend the email verification link for a user who hasn't verified yet.
+    """
+    user = await crud_user.get_by_email(db, email=request.email)
+
+    if user and not bool(user.is_email_verified):
+        token = secrets.token_urlsafe(32)
+        verification_tokens[token] = str(user.email)
+
+        try:
+            from app.services.email_service import EmailService
+            await EmailService.send_welcome_verification(
+                to_email=str(user.email),
+                to_name=str(user.full_name),
+                verification_token=token,
+            )
+        except Exception as e:
+            print(f"[Auth] Resend verification failed for {request.email}: {e}")
+
+    # Always return same message to avoid email enumeration
+    return {"message": "If that account exists and is unverified, a new verification link has been sent."}

@@ -51,6 +51,7 @@ class CRUDActivityLog:
         limit: int = 50,
         user_id: Optional[str] = None,
         project_id: Optional[str] = None,
+        resource_id: Optional[str] = None,
         action: Optional[str] = None,
         resource_type: Optional[str] = None,
         date_from: Optional[datetime] = None,
@@ -75,6 +76,8 @@ class CRUDActivityLog:
             conditions.append(ActivityLog.user_id == user_id)
         if project_id:
             conditions.append(ActivityLog.project_id == project_id)
+        if resource_id:
+            conditions.append(ActivityLog.resource_id == resource_id)
         if action:
             conditions.append(ActivityLog.action == action)
         if resource_type:
@@ -119,7 +122,9 @@ class CRUDActivityLog:
         *,
         user_id: Optional[str] = None,
         project_id: Optional[str] = None,
+        resource_id: Optional[str] = None,
         action: Optional[str] = None,
+        resource_type: Optional[str] = None,
         date_from: Optional[datetime] = None,
         date_to: Optional[datetime] = None
     ) -> int:
@@ -131,8 +136,12 @@ class CRUDActivityLog:
             conditions.append(ActivityLog.user_id == user_id)
         if project_id:
             conditions.append(ActivityLog.project_id == project_id)
+        if resource_id:
+            conditions.append(ActivityLog.resource_id == resource_id)
         if action:
             conditions.append(ActivityLog.action == action)
+        if resource_type:
+            conditions.append(ActivityLog.resource_type == resource_type)
         if date_from:
             conditions.append(ActivityLog.created_at >= date_from)
         if date_to:

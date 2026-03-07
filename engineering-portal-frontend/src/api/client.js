@@ -75,6 +75,16 @@ export const authAPI = {
     })
     return response.data
   },
+
+  verifyEmail: async (token) => {
+    const response = await api.get('/auth/verify-email', { params: { token } })
+    return response.data
+  },
+
+  resendVerification: async (email) => {
+    const response = await api.post('/auth/resend-verification', { email })
+    return response.data
+  },
 }
 
 // Projects API
@@ -226,6 +236,11 @@ export const documentsAPI = {
 
   getVersions: async (documentId) => {
     const response = await api.get(`/documents/${documentId}/versions`)
+    return response.data
+  },
+
+  getActivity: async (documentId, limit = 50) => {
+    const response = await api.get(`/documents/${documentId}/activity`, { params: { limit } })
     return response.data
   },
 

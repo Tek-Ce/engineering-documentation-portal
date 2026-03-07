@@ -82,13 +82,32 @@ async def create_user(
             detail="Email already registered"
         )
     
-    # ✅ FIXED: Cast Column[str] to str
     user = await crud_user.create(
-        db, 
-        obj_in=user_in, 
-        created_by_id=str(current_user.id)  # ← Fixed Error #2
+        db,
+        obj_in=user_in,
+        created_by_id=str(current_user.id)
     )
+    # New users must verify their email before logging in
+    user.is_email_verified = False  # type: ignore
     await db.commit()
+    await db.refresh(user)
+
+    # Generate verification token and send welcome email
+    import secrets as _secrets
+    from app.api.v1.auth import verification_tokens
+    token = _secrets.token_urlsafe(32)
+    verification_tokens[token] = str(user.email)
+
+    try:
+        from app.services.email_service import EmailService
+        await EmailService.send_welcome_verification(
+            to_email=str(user.email),
+            to_name=str(user.full_name),
+            verification_token=token,
+        )
+    except Exception as e:
+        print(f"[Users] Welcome email failed for {user.email}: {e}")
+
     return UserResponse.model_validate(user)
 
 

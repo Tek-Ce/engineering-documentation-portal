@@ -1,20 +1,26 @@
 # ============================================
 # FILE 3: app/db/database.py
 # ============================================
-from app.db.base_class import Base 
+import os
+from app.db.base_class import Base
 from sqlalchemy.ext.asyncio import (
-    create_async_engine, 
-    AsyncSession, 
+    create_async_engine,
+    AsyncSession,
     async_sessionmaker)
- # ✅ use the shared Base
-from app.core.config import settings
 
-# Convert MySQL URL to async
-ASYNC_DATABASE_URL = settings.DATABASE_URL.replace("mysql://", "mysql+aiomysql://")
+# Use os.getenv directly to avoid pydantic-settings URL mangling.
+# Only add +aiomysql if the URL starts with bare mysql:// (not already mysql+aiomysql://).
+# Note: .replace("mysql://", "mysql+aiomysql://") would corrupt an already-correct
+# mysql+aiomysql:// URL because "aiomysql://" contains the substring "mysql://".
+_raw_url = os.getenv("DATABASE_URL", "")
+if _raw_url.startswith("mysql://"):
+    ASYNC_DATABASE_URL = "mysql+aiomysql://" + _raw_url[len("mysql://"):]
+else:
+    ASYNC_DATABASE_URL = _raw_url
 
 engine = create_async_engine(
     ASYNC_DATABASE_URL,
-    echo=settings.DEBUG,
+    echo=False,
     pool_pre_ping=True
 )
 

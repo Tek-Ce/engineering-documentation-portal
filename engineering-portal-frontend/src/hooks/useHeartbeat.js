@@ -49,12 +49,4 @@ export function useHeartbeat(intervalMs = 60000) {
 }
 
 export default useHeartbeat
-const sendHeartbeat = async () => {
-  try {
-    console.log('Sending heartbeat')
-    await adminAPI.heartbeat()
-  } catch (error) {
-    console.debug('Heartbeat failed:', error.message)
-  }
-}
 
