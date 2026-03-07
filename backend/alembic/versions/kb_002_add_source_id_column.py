@@ -18,14 +18,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """
-    Add missing columns to kb_chunks table:
-    - source_id: tracks the source entity ID (document_id, comment_id, etc.)
-    - source_type: type of source (document, comment, etc.)
-    - token_count: number of tokens in the chunk
-    """
     conn = op.get_bind()
     inspector = sa.inspect(conn)
+    if 'kb_chunks' not in inspector.get_table_names():
+        return
     columns = [col['name'] for col in inspector.get_columns('kb_chunks')]
 
     # Add source_id column if not exists

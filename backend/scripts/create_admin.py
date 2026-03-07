@@ -26,6 +26,16 @@ from passlib.context import CryptContext
 try:
     from app.models.user import User
     from app.core.config import settings
+    from app.models.project import Project, ProjectRole
+    from app.models.document import Document
+    from app.models.project_member import ProjectMember
+    from app.models.notification import Notification
+    from app.models.comment import Comment
+    from app.models.tag import Tag
+    try:
+        from app.models import kb  # registers KBChunk/KBSummary with SQLAlchemy
+    except Exception:
+        pass
 except ImportError as e:
     print(f"❌ Error importing modules: {e}")
     print("Make sure you're running this from the project root:")
@@ -48,7 +58,13 @@ class AdminCreator:
         """Initialize database connection"""
         try:
             # Create async engine
-            database_url = settings.DATABASE_URL.replace('mysql://', 'mysql+aiomysql://')
+            raw_url = settings.DATABASE_URL
+            if raw_url.startswith('mysql://'):
+                database_url = 'mysql+aiomysql://' + raw_url[len('mysql://'):]
+            elif raw_url.startswith('mysql+pymysql://'):
+                database_url = 'mysql+aiomysql://' + raw_url[len('mysql+pymysql://'):]
+            else:
+                database_url = raw_url
             
             if not database_url:
                 print("❌ DATABASE_URL not configured in .env file")

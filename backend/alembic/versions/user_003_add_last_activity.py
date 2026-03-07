@@ -18,8 +18,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Add last_activity column to users table
-    op.add_column('users', sa.Column('last_activity', sa.DateTime(), nullable=True))
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    if 'users' not in inspector.get_table_names():
+        return
+    cols = [c['name'] for c in inspector.get_columns('users')]
+    if 'last_activity' not in cols:
+        op.add_column('users', sa.Column('last_activity', sa.DateTime(), nullable=True))
 
 
 def downgrade() -> None:

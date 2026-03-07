@@ -18,8 +18,24 @@ branch_labels = None
 depends_on = None
 
 def upgrade():
-    # Baseline migration — schema already exists
-    pass
+    # Import all models so they register with Base metadata
+    import app.models.user
+    import app.models.project
+    import app.models.project_member
+    import app.models.document
+    import app.models.comment
+    import app.models.notification
+    import app.models.tag
+    import app.models.activity_log
+    try:
+        import app.models.kb
+    except Exception:
+        pass
+
+    from app.db.base_class import Base
+    bind = op.get_bind()
+    Base.metadata.create_all(bind)
+
 
 def downgrade():
     pass

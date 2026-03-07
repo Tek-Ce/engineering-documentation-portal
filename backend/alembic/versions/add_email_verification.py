@@ -14,18 +14,21 @@ depends_on = None
 
 
 def upgrade():
-    # Add is_email_verified column.
-    # server_default='1' means ALL existing users are marked as already verified
-    # so no one gets locked out. New users created via API will have it set to 0.
-    op.add_column(
-        "users",
-        sa.Column(
-            "is_email_verified",
-            sa.Boolean(),
-            nullable=False,
-            server_default="1",   # existing users → verified
-        ),
-    )
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    if 'users' not in inspector.get_table_names():
+        return
+    cols = [c['name'] for c in inspector.get_columns('users')]
+    if 'is_email_verified' not in cols:
+        op.add_column(
+            "users",
+            sa.Column(
+                "is_email_verified",
+                sa.Boolean(),
+                nullable=False,
+                server_default="1",
+            ),
+        )
 
 
 def downgrade():
