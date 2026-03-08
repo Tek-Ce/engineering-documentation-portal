@@ -34,14 +34,12 @@ class PasswordResetConfirm(BaseModel):
 async def login(
     username: str = Form(...),
     password: str = Form(...),
-    request: "Request" = None,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Login with email and password.
     Returns specific error codes so the frontend can show helpful messages.
     """
-    from fastapi import Request as _Request
 
     # Step 1: does this email exist at all?
     existing = await crud_user.get_by_email(db, email=username)

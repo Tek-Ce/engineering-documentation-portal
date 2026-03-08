@@ -1,15 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { toast } from 'react-hot-toast'
-import { X, Loader2, Save } from 'lucide-react'
+import { X, Loader2, Save, ChevronDown, Check } from 'lucide-react'
 import { documentsAPI, tagsAPI, projectsAPI } from '../api/client'
+import { useAuthStore } from '../store/authStore'
 import clsx from 'clsx'
 
 function EditDocumentModal({ isOpen, onClose, document }) {
   const queryClient = useQueryClient()
+  const { user, isAdmin } = useAuthStore()
   const [selectedTags, setSelectedTags] = useState([])
   const [selectedReviewers, setSelectedReviewers] = useState([])
+  const [reviewerDropdownOpen, setReviewerDropdownOpen] = useState(false)
+  const reviewerDropdownRef = useRef(null)
 
   const {
     register,
@@ -37,6 +41,26 @@ function EditDocumentModal({ isOpen, onClose, document }) {
     queryFn: () => projectsAPI.getMembers(document?.project_id),
     enabled: !!document?.project_id,
   })
+
+  // Determine if current user can set advanced statuses (approved/published/archived)
+  const userProjectRole = (membersData || []).find(m => m.user_id === user?.id)?.role
+  const isViewer = userProjectRole?.toLowerCase() === 'viewer'
+  const isDocumentReviewer = !isViewer && (document?.reviewers || []).some(r => (r.id || r) === user?.id)
+  const canSetAdvancedStatus = isAdmin() || userProjectRole?.toLowerCase() === 'owner'
+
+  // Only non-viewer members can be assigned as reviewers
+  const eligibleReviewers = (membersData || []).filter(m => m.role?.toLowerCase() !== 'viewer')
+
+  // Close reviewer dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (reviewerDropdownRef.current && !reviewerDropdownRef.current.contains(e.target)) {
+        setReviewerDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // Initialize form and selections when modal opens
   useEffect(() => {
@@ -167,10 +191,17 @@ function EditDocumentModal({ isOpen, onClose, document }) {
               >
                 <option value="draft">Draft</option>
                 <option value="review">In Review</option>
-                <option value="approved">Approved</option>
-                <option value="published">Published</option>
-                <option value="archived">Archived</option>
+                {canSetAdvancedStatus && (
+                  <>
+                    <option value="approved">Approved</option>
+                    <option value="published">Published</option>
+                    <option value="archived">Archived</option>
+                  </>
+                )}
               </select>
+              {!canSetAdvancedStatus && (
+                <p className="mt-1 text-xs text-surface-400">Approved / Published / Archived can only be set by a reviewer or project owner.</p>
+              )}
             </div>
 
             {/* Tags */}
@@ -198,34 +229,65 @@ function EditDocumentModal({ isOpen, onClose, document }) {
             </div>
 
             {/* Reviewers */}
-            <div>
-              <label className="block text-sm font-medium text-surface-700 mb-3">
+            <div ref={reviewerDropdownRef}>
+              <label className="block text-sm font-medium text-surface-700 mb-1.5">
                 Reviewers (Optional)
               </label>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {(membersData || []).map((member) => (
-                  <label
-                    key={member.user_id}
-                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-surface-50 cursor-pointer transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedReviewers.includes(member.user_id)}
-                      onChange={() => toggleReviewer(member.user_id)}
-                      className="w-4 h-4 text-primary-600 border-surface-300 rounded focus:ring-2 focus:ring-primary-500/30"
-                    />
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
-                        {member.user_name?.charAt(0) || '?'}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-surface-900 truncate">{member.user_name}</p>
-                        <p className="text-xs text-surface-500 capitalize">{member.role}</p>
-                      </div>
-                    </div>
-                  </label>
-                ))}
-              </div>
+              {/* Trigger button */}
+              <button
+                type="button"
+                onClick={() => setReviewerDropdownOpen(prev => !prev)}
+                className="w-full flex items-center justify-between px-4 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
+              >
+                <span className={clsx('flex flex-wrap gap-1.5 flex-1 min-w-0', selectedReviewers.length === 0 && 'text-surface-400')}>
+                  {selectedReviewers.length === 0
+                    ? 'Select reviewers…'
+                    : eligibleReviewers
+                        .filter(m => selectedReviewers.includes(m.user_id))
+                        .map(m => (
+                          <span key={m.user_id} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-700">
+                            {m.user_name}
+                          </span>
+                        ))
+                  }
+                </span>
+                <ChevronDown size={16} className={clsx('ml-2 text-surface-400 flex-shrink-0 transition-transform duration-200', reviewerDropdownOpen && 'rotate-180')} />
+              </button>
+
+              {/* Dropdown list */}
+              {reviewerDropdownOpen && (
+                <div className="mt-1 border border-surface-200 rounded-xl bg-white shadow-lg overflow-hidden">
+                  <div className="max-h-48 overflow-y-auto divide-y divide-surface-100">
+                    {eligibleReviewers.length === 0 ? (
+                      <p className="px-4 py-3 text-sm text-surface-400">No eligible reviewers (viewers excluded)</p>
+                    ) : eligibleReviewers.map((member) => {
+                      const checked = selectedReviewers.includes(member.user_id)
+                      return (
+                        <button
+                          key={member.user_id}
+                          type="button"
+                          onClick={() => toggleReviewer(member.user_id)}
+                          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-50 transition-colors text-left"
+                        >
+                          <div className={clsx(
+                            'w-5 h-5 rounded flex items-center justify-center border flex-shrink-0 transition-colors',
+                            checked ? 'bg-primary-600 border-primary-600' : 'border-surface-300'
+                          )}>
+                            {checked && <Check size={12} className="text-white" />}
+                          </div>
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+                            {member.user_name?.charAt(0) || '?'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-surface-900 truncate">{member.user_name}</p>
+                            <p className="text-xs text-surface-500 capitalize">{member.role}</p>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

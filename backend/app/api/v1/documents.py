@@ -112,6 +112,11 @@ async def upload_document(
     except ValueError:
         doc_status = DocumentStatus.DRAFT
 
+    # Only project OWNER can upload with a non-draft status
+    advanced = {DocumentStatus.APPROVED, DocumentStatus.PUBLISHED, DocumentStatus.ARCHIVED, DocumentStatus.REVIEW}
+    if doc_status in advanced and access_info.role != ProjectMemberRole.OWNER:
+        doc_status = DocumentStatus.DRAFT
+
     # Convert string to DocumentType enum
     try:
         doc_type = DocumentType(document_type_value)
@@ -263,12 +268,18 @@ async def get_pending_review_documents(
     current_user: User = Depends(get_current_user)
 ):
     """Get all documents currently in review status that the user needs to action"""
+    # VIEWERs cannot review documents
+    if current_user.role == "VIEWER":
+        return []
+
     from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
     from app.models.document import Document, document_reviewers as dr_table
 
     if current_user.role == "ADMIN":
         stmt = (
             select(Document)
+            .options(selectinload(Document.reviewers))
             .where(Document.status == "review")
             .order_by(Document.updated_at.desc())
             .limit(20)
@@ -276,6 +287,7 @@ async def get_pending_review_documents(
     else:
         stmt = (
             select(Document)
+            .options(selectinload(Document.reviewers))
             .join(dr_table, dr_table.c.document_id == Document.id)
             .where(
                 Document.status == "review",
@@ -376,7 +388,18 @@ async def update_document(
         )
 
     # Check project access
-    await check_project_access(document.project_id, current_user=current_user, db=db)
+    access_info = await check_project_access(document.project_id, current_user=current_user, db=db)
+
+    # Enforce status transition rules
+    if update_data.status is not None:
+        advanced_statuses = {DocumentStatus.APPROVED, DocumentStatus.PUBLISHED, DocumentStatus.ARCHIVED}
+        is_global_admin = current_user.role == "ADMIN"
+        is_project_owner = access_info.role == ProjectMemberRole.OWNER
+        if update_data.status in advanced_statuses and not is_global_admin and not is_project_owner:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only project owners or admins can set approved, published, or archived status"
+            )
 
     # Update basic fields
     update_dict = {}
@@ -690,17 +713,18 @@ async def approve_document(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Approve a document — only assigned reviewers or admins can approve"""
+    """Approve a document — only assigned reviewers (non-VIEWERs) or admins can approve"""
     document = await crud_document.get(db, id=document_id)
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
-    await check_project_access(document.project_id, current_user=current_user, db=db)
+    access_info = await check_project_access(document.project_id, current_user=current_user, db=db)
 
-    # Only reviewers or admins can approve
+    # Only reviewers or admins can approve; VIEWERs cannot approve
     reviewer_ids = [str(r.id) for r in document.reviewers]
     is_admin = current_user.role == "ADMIN"
-    is_reviewer = str(current_user.id) in reviewer_ids
+    is_viewer = access_info.role == ProjectMemberRole.VIEWER
+    is_reviewer = str(current_user.id) in reviewer_ids and not is_viewer
     if not is_admin and not is_reviewer:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -775,11 +799,12 @@ async def reject_document(
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
-    await check_project_access(document.project_id, current_user=current_user, db=db)
+    access_info = await check_project_access(document.project_id, current_user=current_user, db=db)
 
     reviewer_ids = [str(r.id) for r in document.reviewers]
     is_admin = current_user.role == "ADMIN"
-    is_reviewer = str(current_user.id) in reviewer_ids
+    is_viewer = access_info.role == ProjectMemberRole.VIEWER
+    is_reviewer = str(current_user.id) in reviewer_ids and not is_viewer
     if not is_admin and not is_reviewer:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

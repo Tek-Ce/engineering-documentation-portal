@@ -21,7 +21,8 @@ import {
   Crown,
   Edit3,
   ChevronDown,
-  Search
+  Search,
+  Check
 } from 'lucide-react'
 import { projectsAPI, documentsAPI, usersAPI, tagsAPI, adminAPI } from '../api/client'
 import { useAuthStore } from '../store/authStore'
@@ -33,11 +34,14 @@ import { UserAvatarWithStatus } from '../components/OnlineUsersIndicator'
 // Document Upload Modal – reviewers default to project creator unless changed
 function UploadDocumentModal({ isOpen, onClose, projectId, project }) {
   const queryClient = useQueryClient()
+  const { user } = useAuthStore()
   const fileInputRef = useRef(null)
   const [selectedFile, setSelectedFile] = useState(null)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [selectedTags, setSelectedTags] = useState([])
   const [selectedReviewers, setSelectedReviewers] = useState([])
+  const [reviewerDropdownOpen, setReviewerDropdownOpen] = useState(false)
+  const reviewerDropdownRef = useRef(null)
 
   // Default reviewers to project creator when modal opens (owners/editors can change)
   useEffect(() => {
@@ -45,6 +49,17 @@ function UploadDocumentModal({ isOpen, onClose, projectId, project }) {
       setSelectedReviewers([project.created_by])
     }
   }, [isOpen, project?.created_by])
+
+  // Close reviewer dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (reviewerDropdownRef.current && !reviewerDropdownRef.current.contains(e.target)) {
+        setReviewerDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const {
     register,
@@ -73,6 +88,13 @@ function UploadDocumentModal({ isOpen, onClose, projectId, project }) {
     queryFn: () => projectsAPI.getMembers(projectId),
     enabled: isOpen,
   })
+
+  // Only the project owner can upload in any status
+  const isProjectOwner = project?.created_by === user?.id ||
+    (membersData || []).find(m => m.user_id === user?.id)?.role?.toLowerCase() === 'owner'
+
+  // Only non-viewer members can be assigned as reviewers
+  const eligibleReviewers = (membersData || []).filter(m => m.role?.toLowerCase() !== 'viewer')
 
   const uploadMutation = useMutation({
     mutationFn: (data) => documentsAPI.upload(
@@ -258,47 +280,92 @@ function UploadDocumentModal({ isOpen, onClose, projectId, project }) {
           </div>
 
           {/* Reviewers – default: project creator; changeable by owners/editors */}
-          <div>
+          <div ref={reviewerDropdownRef}>
             <label className="block text-sm font-medium text-surface-700 mb-1.5">
               Assign Reviewers <span className="text-surface-500 font-normal">(default: project creator)</span>
             </label>
-            <div className="space-y-2 max-h-40 overflow-y-auto p-3 bg-surface-50 border border-surface-200 rounded-xl">
-              {(membersData || []).map((member) => (
-                <label
-                  key={member.user_id}
-                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-100 cursor-pointer transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedReviewers.includes(member.user_id)}
-                    onChange={() => toggleReviewer(member.user_id)}
-                    className="w-4 h-4 text-primary-600 border-surface-300 rounded focus:ring-primary-500"
-                  />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-surface-900">{member.user_name}</p>
-                    <p className="text-xs text-surface-500">{member.role}</p>
-                  </div>
-                </label>
-              ))}
-              {(!membersData || membersData.length === 0) && (
-                <p className="text-sm text-surface-400">No members available</p>
-              )}
-            </div>
+            {/* Trigger button */}
+            <button
+              type="button"
+              onClick={() => setReviewerDropdownOpen(prev => !prev)}
+              className="w-full flex items-center justify-between px-4 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
+            >
+              <span className={clsx('flex flex-wrap gap-1.5 flex-1 min-w-0', selectedReviewers.length === 0 && 'text-surface-400')}>
+                {selectedReviewers.length === 0
+                  ? 'Select reviewers…'
+                  : eligibleReviewers
+                      .filter(m => selectedReviewers.includes(m.user_id))
+                      .map(m => (
+                        <span key={m.user_id} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-700">
+                          {m.user_name}
+                        </span>
+                      ))
+                }
+              </span>
+              <ChevronDown size={16} className={clsx('ml-2 text-surface-400 flex-shrink-0 transition-transform duration-200', reviewerDropdownOpen && 'rotate-180')} />
+            </button>
+
+            {/* Dropdown list */}
+            {reviewerDropdownOpen && (
+              <div className="mt-1 border border-surface-200 rounded-xl bg-white shadow-lg overflow-hidden">
+                <div className="max-h-48 overflow-y-auto divide-y divide-surface-100">
+                  {eligibleReviewers.length === 0 ? (
+                    <p className="px-4 py-3 text-sm text-surface-400">No eligible reviewers (viewers excluded)</p>
+                  ) : eligibleReviewers.map((member) => {
+                    const checked = selectedReviewers.includes(member.user_id)
+                    return (
+                      <button
+                        key={member.user_id}
+                        type="button"
+                        onClick={() => toggleReviewer(member.user_id)}
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-50 transition-colors text-left"
+                      >
+                        <div className={clsx(
+                          'w-5 h-5 rounded flex items-center justify-center border flex-shrink-0 transition-colors',
+                          checked ? 'bg-primary-600 border-primary-600' : 'border-surface-300'
+                        )}>
+                          {checked && <Check size={12} className="text-white" />}
+                        </div>
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+                          {member.user_name?.charAt(0) || '?'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-surface-900 truncate">{member.user_name}</p>
+                          <p className="text-xs text-surface-500 capitalize">{member.role}</p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Status */}
+          {/* Status — project owners can set any status; others locked to Draft */}
           <div>
             <label className="block text-sm font-medium text-surface-700 mb-1.5">
               Status
             </label>
-            <select
-              {...register('status')}
-              className="w-full h-11 px-4 bg-surface-50 border border-surface-200 rounded-xl text-surface-900 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all"
-            >
-              <option value="draft">Draft</option>
-              <option value="review">In Review</option>
-              <option value="published">Published</option>
-            </select>
+            {isProjectOwner ? (
+              <select
+                {...register('status', { required: true })}
+                className="w-full px-4 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-surface-900 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all"
+              >
+                <option value="draft">Draft</option>
+                <option value="review">In Review</option>
+                <option value="approved">Approved</option>
+                <option value="published">Published</option>
+                <option value="archived">Archived</option>
+              </select>
+            ) : (
+              <>
+                <div className="flex items-center h-11 px-4 bg-surface-50 border border-surface-200 rounded-xl text-surface-500 text-sm gap-2">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">Draft</span>
+                  <span>Only the project owner can upload in a different status</span>
+                </div>
+                <input type="hidden" {...register('status')} defaultValue="draft" />
+              </>
+            )}
           </div>
 
           {/* Actions */}

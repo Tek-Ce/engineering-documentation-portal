@@ -2,6 +2,9 @@
 # FILE 3: app/db/database.py
 # ============================================
 import os
+from dotenv import load_dotenv
+load_dotenv()  # loads .env into os.environ before anything reads it
+
 from app.db.base_class import Base
 from sqlalchemy.ext.asyncio import (
     create_async_engine,

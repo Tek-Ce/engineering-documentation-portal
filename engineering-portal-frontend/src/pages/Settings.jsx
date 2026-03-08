@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {
   User,
@@ -448,6 +448,7 @@ function Settings() {
 
 function NotificationPrefsPanel() {
   const { user } = useAuthStore()
+  const queryClient = useQueryClient()
   const { data: prefs, isLoading } = useQuery({
     queryKey: ['notification-prefs'],
     queryFn: () => authAPI.getNotificationPrefs(),
@@ -455,8 +456,22 @@ function NotificationPrefsPanel() {
 
   const mutation = useMutation({
     mutationFn: (updates) => authAPI.updateNotificationPrefs(updates),
+    onMutate: async (updates) => {
+      // Optimistic update — reflect the toggle immediately
+      await queryClient.cancelQueries({ queryKey: ['notification-prefs'] })
+      const previous = queryClient.getQueryData(['notification-prefs'])
+      queryClient.setQueryData(['notification-prefs'], (old) => ({ ...old, ...updates }))
+      return { previous }
+    },
+    onError: (_err, _updates, context) => {
+      // Roll back on failure
+      queryClient.setQueryData(['notification-prefs'], context?.previous)
+      toast.error('Failed to save preferences')
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['notification-prefs'] })
+    },
     onSuccess: () => toast.success('Notification preferences saved'),
-    onError: () => toast.error('Failed to save preferences'),
   })
 
   const toggle = (key, currentValue) => {

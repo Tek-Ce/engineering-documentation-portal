@@ -60,9 +60,9 @@ function Layout() {
     prevUnreadRef.current = unread
   }, [notifStats?.unread, navigate])
 
-  // Idle auto-logout after 30 minutes of inactivity
+  // Idle auto-logout after 5 minutes of inactivity
   useEffect(() => {
-    const IDLE_MS = 30 * 60 * 1000 // 30 minutes
+    const IDLE_MS = 5 * 60 * 1000 // 5 minutes
     let timer
 
     const resetTimer = () => {
