@@ -203,7 +203,7 @@ function EditDocumentModal({ isOpen, onClose, document }) {
                 Reviewers (Optional)
               </label>
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {membersData?.members?.map((member) => (
+                {(membersData || []).map((member) => (
                   <label
                     key={member.user_id}
                     className="flex items-center gap-3 p-3 rounded-lg hover:bg-surface-50 cursor-pointer transition-colors"

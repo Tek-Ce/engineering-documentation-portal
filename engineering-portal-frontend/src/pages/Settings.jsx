@@ -122,11 +122,12 @@ function Settings() {
     { id: 'notifications', label: 'Notifications', icon: Bell },
   ]
 
-  const { data: projects = [], isLoading: projectsLoading } = useQuery({
+  const { data: projectsData, isLoading: projectsLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: () => projectsAPI.list(),
     enabled: activeTab === 'projects',
   })
+  const projects = projectsData?.projects ?? []
 
   const roleLabels = {
     ADMIN: { label: 'Administrator', color: 'bg-amber-100 text-amber-700' },

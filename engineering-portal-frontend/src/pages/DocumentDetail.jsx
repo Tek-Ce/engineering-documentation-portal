@@ -387,7 +387,7 @@ function DocumentDetail() {
   const status = statusStyles[document.status] || statusStyles.draft
 
   // Approval workflow permissions
-  const reviewerIds = (document.reviewers || []).map(r => String(r.id))
+  const reviewerIds = (document.reviewers || []).map(r => String(typeof r === 'string' ? r : r.id))
   const isReviewer = reviewerIds.includes(String(currentUser?.id))
   const isAdmin = currentUser?.role === 'ADMIN'
   const canSubmitForReview = isDocumentOwner && (document.status === 'draft' || document.status === 'review')

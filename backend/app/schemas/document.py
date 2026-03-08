@@ -66,7 +66,7 @@ class DocumentResponse(DocumentBase):
     project_name: Optional[str] = None
     uploader_name: Optional[str] = None
     tags: List[dict] = Field(default_factory=list)  # List of {id, name}
-    reviewers: List[str] = Field(default_factory=list)
+    reviewers: List[dict] = Field(default_factory=list)
 
     @field_validator('tags', mode='before')
     @classmethod
@@ -86,12 +86,15 @@ class DocumentResponse(DocumentBase):
 
     @field_validator('reviewers', mode='before')
     @classmethod
-    def transform_reviewers(cls, v: Any) -> List[str]:
-        """Transform User objects to list of user IDs"""
+    def transform_reviewers(cls, v: Any) -> List[dict]:
+        """Transform User objects to list of {id, full_name, email} dicts"""
         if not v:
             return []
         # v is a list of User objects
-        return [str(user.id) for user in v if hasattr(user, 'id')]
+        return [
+            {'id': str(user.id), 'full_name': getattr(user, 'full_name', None), 'email': getattr(user, 'email', None)}
+            for user in v if hasattr(user, 'id')
+        ]
 
 class DocumentListResponse(BaseModel):
     documents: List[DocumentResponse]

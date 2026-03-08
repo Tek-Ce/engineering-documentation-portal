@@ -263,7 +263,7 @@ function UploadDocumentModal({ isOpen, onClose, projectId, project }) {
               Assign Reviewers <span className="text-surface-500 font-normal">(default: project creator)</span>
             </label>
             <div className="space-y-2 max-h-40 overflow-y-auto p-3 bg-surface-50 border border-surface-200 rounded-xl">
-              {membersData?.members?.map((member) => (
+              {(membersData || []).map((member) => (
                 <label
                   key={member.user_id}
                   className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-100 cursor-pointer transition-colors"
@@ -280,7 +280,7 @@ function UploadDocumentModal({ isOpen, onClose, projectId, project }) {
                   </div>
                 </label>
               ))}
-              {(!membersData?.members || membersData.members.length === 0) && (
+              {(!membersData || membersData.length === 0) && (
                 <p className="text-sm text-surface-400">No members available</p>
               )}
             </div>
