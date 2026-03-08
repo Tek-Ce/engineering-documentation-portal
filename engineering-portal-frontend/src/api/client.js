@@ -354,6 +354,11 @@ export const tagsAPI = {
     return response.data
   },
 
+  update: async (id, data) => {
+    const response = await api.patch(`/tags/${id}`, data)
+    return response.data
+  },
+
   delete: async (id) => {
     await api.delete(`/tags/${id}`)
   },

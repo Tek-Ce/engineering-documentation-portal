@@ -450,6 +450,7 @@ function Settings() {
 }
 
 function NotificationPrefsPanel() {
+  const { user } = useAuthStore()
   const { data: prefs, isLoading } = useQuery({
     queryKey: ['notification-prefs'],
     queryFn: () => authAPI.getNotificationPrefs(),
@@ -532,7 +533,7 @@ function NotificationPrefsPanel() {
 
       <div className="mt-6 p-4 bg-blue-50 border border-blue-100 rounded-xl">
         <p className="text-sm text-blue-700">
-          <strong>Note:</strong> Emails are sent to <strong>{}</strong> your registered email address.
+          <strong>Note:</strong> Emails are sent to <strong>{user?.email}</strong>.
           To receive emails, your domain must be verified with our mail provider.
         </p>
       </div>
