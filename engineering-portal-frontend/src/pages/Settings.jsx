@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -11,9 +12,11 @@ import {
   EyeOff,
   Loader2,
   Check,
+  FolderKanban,
+  ArrowRight,
   Bell
 } from 'lucide-react'
-import { authAPI } from '../api/client'
+import { authAPI, projectsAPI } from '../api/client'
 import { useAuthStore } from '../store/authStore'
 import clsx from 'clsx'
 
@@ -114,9 +117,20 @@ function Settings() {
 
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
+    { id: 'projects', label: 'My Projects', icon: FolderKanban },
     { id: 'security', label: 'Security', icon: Lock },
     { id: 'notifications', label: 'Notifications', icon: Bell },
   ]
+
+  const { data: projectsData, isLoading: projectsLoading } = useQuery({
+    queryKey: ['my-projects'],
+    queryFn: async () => {
+      const res = await projectsAPI.list()
+      return res?.projects ?? []
+    },
+    enabled: activeTab === 'projects',
+  })
+  const projects = projectsData ?? []
 
   const roleLabels = {
     ADMIN: { label: 'Administrator', color: 'bg-amber-100 text-amber-700' },
@@ -252,6 +266,53 @@ function Settings() {
                 <h4 className="text-sm font-medium text-surface-700 mb-3">Edit Profile</h4>
                 <ProfileToggle initialData={{ full_name: user?.full_name, email: user?.email }} />
               </div>
+            </div>
+          )}
+
+          {activeTab === 'projects' && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-surface-900">Projects you have access to</h3>
+              <p className="text-sm text-surface-500">Quick links to projects where you are a member.</p>
+              {projectsLoading ? (
+                <div className="flex items-center gap-2 text-surface-500 py-6">
+                  <Loader2 size={20} className="animate-spin" />
+                  Loading projects…
+                </div>
+              ) : projects.length === 0 ? (
+                <div className="py-8 text-center text-surface-500 rounded-xl bg-surface-50 border border-surface-100">
+                  <FolderKanban size={40} className="mx-auto mb-2 text-surface-300" />
+                  <p>You are not a member of any projects yet.</p>
+                  <Link to="/projects" className="inline-block mt-3 text-primary-600 hover:underline font-medium">
+                    Browse projects
+                  </Link>
+                </div>
+              ) : (
+                <ul className="space-y-2">
+                  {projects.map((project) => (
+                    <li key={project.id}>
+                      <Link
+                        to={`/projects/${project.id}`}
+                        className="flex items-center justify-between p-3 sm:p-4 rounded-xl border border-surface-200 hover:border-primary-200 hover:bg-primary-50/50 transition-colors group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
+                            <FolderKanban size={20} className="text-primary-600" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-surface-900 truncate">{project.name}</p>
+                            {project.code && <p className="text-xs text-surface-500">{project.code}</p>}
+                          </div>
+                        </div>
+                        <ArrowRight size={18} className="text-surface-400 group-hover:text-primary-600 flex-shrink-0 ml-2" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Link to="/projects" className="inline-flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700 mt-2">
+                <FolderKanban size={16} />
+                View all projects
+              </Link>
             </div>
           )}
 
