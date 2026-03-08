@@ -60,6 +60,30 @@ function Layout() {
     prevUnreadRef.current = unread
   }, [notifStats?.unread, navigate])
 
+  // Idle auto-logout after 30 minutes of inactivity
+  useEffect(() => {
+    const IDLE_MS = 30 * 60 * 1000 // 30 minutes
+    let timer
+
+    const resetTimer = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        toast('You have been logged out due to inactivity.', { icon: '🔒', duration: 4000 })
+        logout()
+        navigate('/login')
+      }, IDLE_MS)
+    }
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll']
+    events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }))
+    resetTimer() // start timer immediately
+
+    return () => {
+      clearTimeout(timer)
+      events.forEach(e => window.removeEventListener(e, resetTimer))
+    }
+  }, [logout, navigate])
+
   // Close menus when clicking outside
   useEffect(() => {
     function handleClickOutside(event) {
