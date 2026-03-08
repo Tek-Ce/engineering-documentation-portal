@@ -24,7 +24,8 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // Only force-logout on 401 when NOT on the login page (avoids reload loop during login)
+    if (error.response?.status === 401 && !window.location.pathname.includes('/login')) {
       useAuthStore.getState().logout()
       window.location.href = '/login'
     }
