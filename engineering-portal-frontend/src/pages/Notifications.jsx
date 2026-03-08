@@ -45,6 +45,11 @@ function NotificationItem({ notification, onMarkRead, onDelete, onOpen }) {
       color: 'bg-accent-green',
       label: 'Project'
     },
+    DOCUMENT_VERSION_UPLOAD: {
+      icon: Upload,
+      color: 'bg-primary-400',
+      label: 'New version'
+    },
     DOCUMENT_REVIEW_REQUESTED: {
       icon: Eye,
       color: 'bg-amber-500',
@@ -162,18 +167,20 @@ function Notifications() {
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState('all') // all, unread
 
-  // Fetch notifications
+  // Fetch notifications — poll every 15s so new items appear automatically
   const { data, isLoading, error } = useQuery({
     queryKey: ['notifications', filter],
-    queryFn: () => filter === 'unread' 
-      ? notificationsAPI.getUnread() 
+    queryFn: () => filter === 'unread'
+      ? notificationsAPI.getUnread()
       : notificationsAPI.list({ limit: 100 }),
+    refetchInterval: 15000,
   })
 
   // Fetch stats
   const { data: stats } = useQuery({
     queryKey: ['notification-stats'],
     queryFn: notificationsAPI.getStats,
+    refetchInterval: 15000,
   })
 
   // Mark single as read

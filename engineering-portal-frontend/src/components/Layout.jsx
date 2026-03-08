@@ -14,11 +14,12 @@ import {
   Database,
   Eye
 } from 'lucide-react'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useAuthStore, useUIStore } from '../store/authStore'
 import { notificationsAPI } from '../api/client'
 import { OnlineUsersIndicator } from './OnlineUsersIndicator'
 import clsx from 'clsx'
+import toast from 'react-hot-toast'
 
 function Layout() {
   const navigate = useNavigate()
@@ -26,13 +27,38 @@ function Layout() {
   const { sidebarOpen, toggleSidebar } = useUIStore()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const userMenuRef = useRef(null)
+  const prevUnreadRef = useRef(null)
 
-  // Fetch notification count
+  // Fetch notification count — poll every 15s and toast on new arrivals
   const { data: notifStats } = useQuery({
     queryKey: ['notification-stats'],
     queryFn: notificationsAPI.getStats,
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   })
+
+  // Toast when new notifications arrive
+  useEffect(() => {
+    const unread = notifStats?.unread ?? 0
+    if (prevUnreadRef.current !== null && unread > prevUnreadRef.current) {
+      const diff = unread - prevUnreadRef.current
+      toast(
+        (t) => (
+          <button
+            onClick={() => { navigate('/notifications'); toast.dismiss(t.id) }}
+            className="flex items-center gap-2 text-sm"
+          >
+            <Bell size={16} className="text-primary-500 shrink-0" />
+            <span>
+              <strong>{diff} new notification{diff > 1 ? 's' : ''}</strong>
+              <span className="text-surface-500 ml-1">— tap to view</span>
+            </span>
+          </button>
+        ),
+        { duration: 5000, id: 'new-notification' }
+      )
+    }
+    prevUnreadRef.current = unread
+  }, [notifStats?.unread, navigate])
 
   // Close menus when clicking outside
   useEffect(() => {
@@ -238,7 +264,7 @@ function Layout() {
           {/* Right Section */}
           <div className="flex items-center gap-2 lg:gap-4">
             {/* Online Users Indicator */}
-            <div className="hidden sm:block">
+            <div>
               <OnlineUsersIndicator />
             </div>
 
