@@ -18,7 +18,7 @@ class CRUDComment(CRUDBase[Comment, CommentCreate, CommentUpdate]):
         result = await db.execute(
             select(Comment)
             .options(selectinload(Comment.user))  # Eagerly load user
-            .options(selectinload(Comment.replies))  # Eagerly load replies
+            .options(selectinload(Comment.replies).selectinload(Comment.user))  # Eagerly load replies + their users
             .where(Comment.document_id == document_id)
             .order_by(Comment.created_at.asc())
         )

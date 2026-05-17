@@ -148,6 +148,22 @@ function UploadDocumentModal({ isOpen, onClose, projectId, project }) {
     if (file) {
       setSelectedFile(file)
     }
+    // Reset input value so the same file can be re-selected
+    if (e.target) e.target.value = ''
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const file = e.dataTransfer?.files?.[0]
+    if (file) {
+      setSelectedFile(file)
+    }
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
   }
 
   if (!isOpen) return null
@@ -175,10 +191,12 @@ function UploadDocumentModal({ isOpen, onClose, projectId, project }) {
               type="file"
               onChange={handleFileSelect}
               className="hidden"
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.md"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.png,.jpg,.jpeg,.gif,.zip,.rar"
             />
             <div
               onClick={() => fileInputRef.current?.click()}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
               className={clsx(
                 'border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors',
                 selectedFile
@@ -188,19 +206,26 @@ function UploadDocumentModal({ isOpen, onClose, projectId, project }) {
             >
               {selectedFile ? (
                 <div className="flex items-center justify-center gap-3">
-                  <FileText size={24} className="text-primary-600" />
-                  <div className="text-left">
-                    <p className="font-medium text-surface-800">{selectedFile.name}</p>
+                  <FileText size={24} className="text-primary-600 flex-shrink-0" />
+                  <div className="text-left min-w-0">
+                    <p className="font-medium text-surface-800 truncate">{selectedFile.name}</p>
                     <p className="text-sm text-surface-500">
                       {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setSelectedFile(null) }}
+                    className="ml-2 p-1 rounded-full hover:bg-surface-200 transition-colors flex-shrink-0"
+                  >
+                    <X size={16} className="text-surface-500" />
+                  </button>
                 </div>
               ) : (
                 <>
                   <Upload size={32} className="mx-auto text-surface-300 mb-2" />
-                  <p className="text-surface-600">Click to select a file</p>
-                  <p className="text-sm text-surface-400 mt-1">PDF, DOC, DOCX, XLS, XLSX, TXT, MD</p>
+                  <p className="text-surface-600">Click to select a file or drag & drop</p>
+                  <p className="text-sm text-surface-400 mt-1">PDF, Word, Excel, PowerPoint, Images, Text, and more</p>
                 </>
               )}
             </div>
@@ -1109,9 +1134,10 @@ function ProjectDetail() {
     { id: 'discussion', label: 'Discussion' },
   ]
 
-  if (isOwner) {
-    tabs.push({ id: 'settings', label: 'Settings' })
-  }
+  // Settings tab disabled — project settings managed via admin panel
+  // if (isOwner) {
+  //   tabs.push({ id: 'settings', label: 'Settings' })
+  // }
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 px-4 sm:px-6 animate-fade-in">

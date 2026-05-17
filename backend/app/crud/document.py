@@ -13,13 +13,15 @@ import uuid
 
 class CRUDDocument(CRUDBase[Document, DocumentCreate, DocumentUpdate]):
     async def get(self, db: AsyncSession, id: str) -> Optional[Document]:
-        """Get a single document by ID with tags and reviewers eagerly loaded"""
+        """Get a single document by ID with tags, reviewers, project, and uploader eagerly loaded"""
         result = await db.execute(
             select(Document)
             .where(Document.id == id)
             .options(
                 joinedload(Document.tags).joinedload(DocumentTag.tag),
-                joinedload(Document.reviewers)
+                joinedload(Document.reviewers),
+                joinedload(Document.project),
+                joinedload(Document.uploader),
             )
         )
         return result.scalars().unique().one_or_none()
@@ -38,7 +40,9 @@ class CRUDDocument(CRUDBase[Document, DocumentCreate, DocumentUpdate]):
         """Get documents in a project with tags and reviewers eagerly loaded"""
         query = select(Document).where(Document.project_id == project_id).options(
             joinedload(Document.tags).joinedload(DocumentTag.tag),
-            joinedload(Document.reviewers)
+            joinedload(Document.reviewers),
+            joinedload(Document.project),
+            joinedload(Document.uploader),
         )
 
         if status:

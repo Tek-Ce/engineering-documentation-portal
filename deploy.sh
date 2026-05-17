@@ -21,6 +21,9 @@ rsync -az --delete \
   --exclude='backend/.env' \
   --exclude='uploads/' \
   --exclude='engineering-portal-frontend/dist/' \
+  --exclude='mysql/' \
+  --exclude='certbot/' \
+  --exclude='backend/venv/' \
   -e "ssh -i $SSH_KEY" \
   ./ "$SERVER:$REMOTE_DIR/"
 

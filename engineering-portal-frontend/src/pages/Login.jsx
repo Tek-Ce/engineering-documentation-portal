@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { useMutation } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -11,6 +11,14 @@ function Login() {
   const navigate = useNavigate()
   const { setAuth } = useAuthStore()
   const [showPassword, setShowPassword] = useState(false)
+  const [searchParams] = useSearchParams()
+
+  // Show a toast if the user was redirected here because their session expired
+  useEffect(() => {
+    if (searchParams.get('reason') === 'session_expired') {
+      toast('Your session has expired. Please log in again.', { icon: '🔒', duration: 5000 })
+    }
+  }, [])
   const [unverifiedEmail, setUnverifiedEmail] = useState(null)
   const [resendSent, setResendSent] = useState(false)
 

@@ -18,7 +18,7 @@ class ProjectMember(Base):
     __tablename__ = "project_members"
 
     id = Column(String(36), primary_key=True, index=True)
-    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False, index=True)
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
     role = Column(SQLEnum(ProjectMemberRole), default=ProjectMemberRole.VIEWER)
     added_by = Column(String(36), ForeignKey("users.id"), nullable=True)

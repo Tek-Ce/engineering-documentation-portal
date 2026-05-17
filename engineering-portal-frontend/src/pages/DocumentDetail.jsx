@@ -27,6 +27,31 @@ import { formatDistanceToNow, format } from 'date-fns'
 import clsx from 'clsx'
 import ReactMarkdown from 'react-markdown'
 import CommentsSection from '../components/CommentsSection'
+
+// Programmatic file download — avoids navigating away from the SPA
+function triggerDownload(url, filename) {
+  fetch(url)
+    .then(res => {
+      if (!res.ok) throw new Error('Download failed')
+      return res.blob()
+    })
+    .then(blob => {
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = filename || 'download'
+      document.body.appendChild(a)
+      a.click()
+      setTimeout(() => {
+        URL.revokeObjectURL(blobUrl)
+        document.body.removeChild(a)
+      }, 100)
+    })
+    .catch(() => {
+      // Fallback: open in new tab
+      window.open(url, '_blank')
+    })
+}
 import TagsSection from '../components/TagsSection'
 import EditDocumentModal from '../components/EditDocumentModal'
 
@@ -528,15 +553,15 @@ function DocumentDetail() {
                 <Eye size={16} className="hidden sm:inline" />
                 <span>Full screen</span>
               </button>
-              <a
-                href={documentsAPI.download(document.id)}
-                download
+              <button
+                type="button"
+                onClick={() => triggerDownload(documentsAPI.download(document.id), document.file_name)}
                 className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-surface-100 text-surface-700 font-medium text-sm rounded-lg hover:bg-surface-200 transition-colors flex-1 sm:flex-initial"
               >
                 <Download size={14} className="sm:hidden" />
                 <Download size={16} className="hidden sm:inline" />
                 <span>Download</span>
-              </a>
+              </button>
             </div>
           </div>
         </div>
@@ -608,14 +633,14 @@ function DocumentDetail() {
                     Preview is not available for Word documents. Please download the file to view it.
                   </p>
                   <div className="flex gap-3">
-                    <a
-                      href={downloadUrl}
-                      download
+                    <button
+                      type="button"
+                      onClick={() => triggerDownload(downloadUrl, document.file_name)}
                       className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white font-medium text-sm rounded-xl hover:bg-primary-700 transition-colors"
                     >
                       <Download size={16} />
                       Download Document
-                    </a>
+                    </button>
                   </div>
                   <div className="mt-6 text-xs text-surface-400">
                     <p className="font-medium mb-1">File Details:</p>
@@ -656,10 +681,10 @@ function DocumentDetail() {
                 <FileText size={64} className="text-surface-300 mb-4" />
                 <h3 className="text-lg font-semibold text-surface-700 mb-2">Preview Not Available</h3>
                 <p className="text-sm text-surface-500 mb-4">{document.file_name}</p>
-                <a href={downloadUrl} download className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700">
+                <button type="button" onClick={() => triggerDownload(downloadUrl, document.file_name)} className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700">
                   <Download size={18} />
                   Download File
-                </a>
+                </button>
               </div>
             )
           })()}
@@ -802,14 +827,14 @@ function DocumentDetail() {
                           <p className="text-sm text-surface-500 text-center mb-4 max-w-md">
                             Preview is not available for Word documents. Please download the file to view it.
                           </p>
-                          <a
-                            href={downloadUrl}
-                            download
+                          <button
+                            type="button"
+                            onClick={() => triggerDownload(downloadUrl, document.file_name)}
                             className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white font-medium text-sm rounded-lg hover:bg-primary-700 transition-colors"
                           >
                             <Download size={16} />
                             Download Document
-                          </a>
+                          </button>
                           <div className="mt-4 text-xs text-surface-400 text-center">
                             <p>Name: {document.file_name}</p>
                             <p>Size: {document.file_size ? `${(document.file_size / 1024 / 1024).toFixed(2)} MB` : 'N/A'}</p>
@@ -1001,14 +1026,14 @@ function DocumentDetail() {
                   >
                     <Eye size={18} className="text-surface-600" />
                   </a>
-                  <a
-                    href={documentsAPI.download(id, version.version_number)}
-                    download
+                  <button
+                    type="button"
+                    onClick={() => triggerDownload(documentsAPI.download(id, version.version_number), document?.file_name || 'download')}
                     className="p-2 rounded-lg hover:bg-white transition-colors flex-shrink-0"
                     title="Download this version"
                   >
                     <Download size={18} className="text-surface-600" />
-                  </a>
+                  </button>
                 </div>
               </div>
             ))}

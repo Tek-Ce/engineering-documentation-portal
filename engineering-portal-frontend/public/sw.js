@@ -1,29 +1,21 @@
 // Engineering Documentation Portal — Service Worker
-const CACHE_NAME = 'docportal-v1'
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-]
+const CACHE_NAME = 'docportal-v2'
 
-// Install: cache static shell
+// Install: skip waiting to activate immediately
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
-  )
   self.skipWaiting()
 })
 
-// Activate: clean old caches
+// Activate: clean ALL old caches and claim clients
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    ).then(() => self.clients.claim())
   )
-  self.clients.claim()
 })
 
-// Fetch: network-first for API, cache-first for static assets
+// Fetch handler
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
 
@@ -32,34 +24,53 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // API calls: network-first, fallback to cache
-  if (url.pathname.startsWith('/api/')) {
+  // Navigation requests (HTML pages): ALWAYS network-first, fallback to cached index.html
+  if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
+          const clone = response.clone()
+          caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', clone))
+          return response
+        })
+        .catch(() => caches.match('/index.html'))
+    )
+    return
+  }
+
+  // API calls: network-only (don't cache API responses)
+  if (url.pathname.startsWith('/api/')) {
+    return
+  }
+
+  // Hashed static assets (Vite adds hashes): cache-first is safe
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached
+        return fetch(event.request).then((response) => {
           if (response.ok) {
             const clone = response.clone()
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone))
           }
           return response
         })
-        .catch(() => caches.match(event.request))
+      })
     )
     return
   }
 
-  // Static assets: cache-first
+  // Everything else: network-first
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached
-      return fetch(event.request).then((response) => {
+    fetch(event.request)
+      .then((response) => {
         if (response.ok) {
           const clone = response.clone()
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone))
         }
         return response
       })
-    })
+      .catch(() => caches.match(event.request))
   )
 })
 

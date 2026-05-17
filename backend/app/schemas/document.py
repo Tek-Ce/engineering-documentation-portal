@@ -1,7 +1,7 @@
 # ============================================
 # FILE: app/schemas/document.py
 # ============================================
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from typing import Optional, List, Any
 from datetime import datetime, timezone
 from enum import Enum
@@ -39,7 +39,7 @@ class DocumentUpdate(BaseModel):
 
 class DocumentVersionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: str
     version_number: int
     file_path: str
@@ -63,10 +63,28 @@ class DocumentResponse(DocumentBase):
     uploaded_at: datetime
     updated_at: datetime
 
+    uploaded_by: Optional[str] = None
     project_name: Optional[str] = None
     uploader_name: Optional[str] = None
     tags: List[dict] = Field(default_factory=list)  # List of {id, name}
     reviewers: List[dict] = Field(default_factory=list)
+
+    @model_validator(mode='wrap')
+    @classmethod
+    def extract_related_names(cls, values, handler):
+        """Extract project_name and uploader_name from ORM relationships"""
+        # If values is an ORM object, extract related names before Pydantic processes it
+        if hasattr(values, '__table__'):
+            # It's an ORM model — extract relationship data
+            project = getattr(values, 'project', None)
+            uploader = getattr(values, 'uploader', None)
+            result = handler(values)
+            if project and hasattr(project, 'name') and not result.project_name:
+                result.project_name = project.name
+            if uploader and hasattr(uploader, 'full_name') and not result.uploader_name:
+                result.uploader_name = uploader.full_name
+            return result
+        return handler(values)
 
     @field_validator('tags', mode='before')
     @classmethod

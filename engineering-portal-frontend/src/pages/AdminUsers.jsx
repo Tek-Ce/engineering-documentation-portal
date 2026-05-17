@@ -77,7 +77,7 @@ function CreateUserModal({ isOpen, onClose }) {
             <input
               {...register('full_name', { required: 'Full name is required' })}
               className="w-full h-11 px-4 bg-surface-50 border border-surface-200 rounded-xl text-surface-900 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all"
-              placeholder="John Doe"
+              placeholder="Full name"
             />
             {errors.full_name && (
               <p className="mt-1.5 text-sm text-accent-red">{errors.full_name.message}</p>
@@ -91,7 +91,7 @@ function CreateUserModal({ isOpen, onClose }) {
             </label>
             <input
               type="email"
-              {...register('email', { 
+              {...register('email', {
                 required: 'Email is required',
                 pattern: {
                   value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
@@ -99,7 +99,7 @@ function CreateUserModal({ isOpen, onClose }) {
                 }
               })}
               className="w-full h-11 px-4 bg-surface-50 border border-surface-200 rounded-xl text-surface-900 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all"
-              placeholder="john@company.com"
+              placeholder="Email address"
             />
             {errors.email && (
               <p className="mt-1.5 text-sm text-accent-red">{errors.email.message}</p>
@@ -174,9 +174,10 @@ function CreateUserModal({ isOpen, onClose }) {
 }
 
 // User Row
-function UserRow({ user, onToggleActive }) {
+function UserRow({ user, onToggleActive, onChangeRole }) {
   const [menuOpen, setMenuOpen] = useState(false)
-  
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false)
+
   const roleConfig = {
     ADMIN: { icon: Crown, color: 'bg-amber-100 text-amber-700', label: 'Admin' },
     ENGINEER: { icon: Shield, color: 'bg-primary-100 text-primary-700', label: 'Engineer' },
@@ -231,38 +232,64 @@ function UserRow({ user, onToggleActive }) {
 
       <div className="relative">
         <button
-          onClick={() => setMenuOpen(!menuOpen)}
+          onClick={() => { setMenuOpen(!menuOpen); setRoleMenuOpen(false) }}
           className="p-2 rounded-lg hover:bg-surface-100 transition-colors opacity-0 group-hover:opacity-100"
         >
           <MoreVertical size={16} className="text-surface-400" />
         </button>
         {menuOpen && (
           <>
-            <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-            <div className="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-modal border border-surface-200 py-1 z-20 animate-slide-down">
+            <div className="fixed inset-0 z-10" onClick={() => { setMenuOpen(false); setRoleMenuOpen(false) }} />
+            <div className="absolute right-0 mt-1 w-48 bg-white rounded-xl shadow-modal border border-surface-200 py-1 z-20 animate-slide-down">
+              {/* Change Role */}
+              <div className="relative">
+                <button
+                  onClick={() => setRoleMenuOpen(prev => !prev)}
+                  className="w-full flex items-center justify-between gap-2 px-4 py-2 text-sm text-surface-700 hover:bg-surface-50"
+                >
+                  <span className="flex items-center gap-2">
+                    <Edit3 size={14} />
+                    Change Role
+                  </span>
+                  <span className="text-surface-400">›</span>
+                </button>
+                {roleMenuOpen && (
+                  <div className="absolute right-full top-0 mr-1 w-36 bg-white rounded-xl shadow-modal border border-surface-200 py-1 z-30">
+                    {['VIEWER', 'ENGINEER', 'ADMIN'].map(r => (
+                      <button
+                        key={r}
+                        onClick={() => { onChangeRole(user.id, r); setMenuOpen(false); setRoleMenuOpen(false) }}
+                        className={clsx(
+                          'w-full flex items-center gap-2 px-4 py-2 text-sm transition-colors',
+                          user.role === r
+                            ? 'text-primary-600 bg-primary-50 font-medium'
+                            : 'text-surface-700 hover:bg-surface-50'
+                        )}
+                      >
+                        {r === 'ADMIN' && <Crown size={12} />}
+                        {r === 'ENGINEER' && <Shield size={12} />}
+                        {r === 'VIEWER' && <Eye size={12} />}
+                        {r.charAt(0) + r.slice(1).toLowerCase()}
+                        {user.role === r && <span className="ml-auto text-xs">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-surface-100 my-1" />
+
+              {/* Activate / Deactivate */}
               <button
-                onClick={() => {
-                  onToggleActive(user.id, user.is_active)
-                  setMenuOpen(false)
-                }}
+                onClick={() => { onToggleActive(user.id, user.is_active); setMenuOpen(false) }}
                 className={clsx(
                   'w-full flex items-center gap-2 px-4 py-2 text-sm',
-                  user.is_active 
-                    ? 'text-accent-red hover:bg-red-50' 
+                  user.is_active
+                    ? 'text-accent-red hover:bg-red-50'
                     : 'text-accent-green hover:bg-green-50'
                 )}
               >
-                {user.is_active ? (
-                  <>
-                    <UserX size={14} />
-                    Deactivate
-                  </>
-                ) : (
-                  <>
-                    <UserCheck size={14} />
-                    Activate
-                  </>
-                )}
+                {user.is_active ? <><UserX size={14} />Deactivate</> : <><UserCheck size={14} />Activate</>}
               </button>
             </div>
           </>
@@ -292,6 +319,18 @@ function AdminUsers() {
     },
     onError: (error) => {
       toast.error(error.response?.data?.detail || 'Failed to update user')
+    },
+  })
+
+  // Change role mutation
+  const changeRoleMutation = useMutation({
+    mutationFn: ({ id, role }) => usersAPI.update(id, { role }),
+    onSuccess: (_, { role }) => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast.success(`Role changed to ${role.charAt(0) + role.slice(1).toLowerCase()}`)
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.detail || 'Failed to change role')
     },
   })
 
@@ -363,6 +402,7 @@ function AdminUsers() {
               key={user.id}
               user={user}
               onToggleActive={(id, isActive) => toggleActiveMutation.mutate({ id, isActive })}
+              onChangeRole={(id, role) => changeRoleMutation.mutate({ id, role })}
             />
           ))}
         </div>

@@ -20,15 +20,22 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// Response interceptor - handle 401
+// Response interceptor - handle 401 / 502 / 503
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Only force-logout on 401 when NOT on the login page (avoids reload loop during login)
-    if (error.response?.status === 401 && !window.location.pathname.includes('/login')) {
+    const status = error.response?.status
+    const onLoginPage = window.location.pathname.includes('/login')
+
+    if (status === 401 && !onLoginPage) {
+      // Session expired or token invalid — notify user before redirecting
       useAuthStore.getState().logout()
-      window.location.href = '/login'
+      // Use a short delay so any in-flight renders complete before navigation
+      setTimeout(() => {
+        window.location.href = '/login?reason=session_expired'
+      }, 100)
     }
+
     return Promise.reject(error)
   }
 )

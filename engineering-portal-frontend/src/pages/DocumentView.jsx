@@ -28,6 +28,30 @@ import { useAuthStore } from '../store/authStore'
 import { formatDistanceToNow, format } from 'date-fns'
 import clsx from 'clsx'
 
+// Programmatic file download — avoids navigating away from the SPA
+function triggerDownload(url, filename) {
+  fetch(url)
+    .then(res => {
+      if (!res.ok) throw new Error('Download failed')
+      return res.blob()
+    })
+    .then(blob => {
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = filename || 'download'
+      document.body.appendChild(a)
+      a.click()
+      setTimeout(() => {
+        URL.revokeObjectURL(blobUrl)
+        document.body.removeChild(a)
+      }, 100)
+    })
+    .catch(() => {
+      window.open(url, '_blank')
+    })
+}
+
 // Comment Component
 function Comment({ comment, onResolve, onUnresolve, onReply, onDelete, currentUserId }) {
   const [showReplyForm, setShowReplyForm] = useState(false)
@@ -219,14 +243,14 @@ function FilePreview({ document }) {
         <p className="text-sm text-surface-400 mb-4">
           {(document.file_size / 1024).toFixed(1)} KB
         </p>
-        <a
-          href={`/uploads/${document.file_path}`}
-          download={document.file_name}
+        <button
+          type="button"
+          onClick={() => triggerDownload(`/uploads/${document.file_path}`, document.file_name)}
           className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
         >
           <Download size={16} />
           Download File
-        </a>
+        </button>
       </div>
     </div>
   )
@@ -391,14 +415,14 @@ function DocumentView() {
           </div>
         </div>
 
-        <a
-          href={`/uploads/${document.file_path}`}
-          download={document.file_name}
+        <button
+          type="button"
+          onClick={() => triggerDownload(`/uploads/${document.file_path}`, document.file_name)}
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-600 text-white font-medium rounded-xl hover:bg-primary-700 transition-colors"
         >
           <Download size={18} />
           Download
-        </a>
+        </button>
       </div>
 
       {/* Content Grid */}

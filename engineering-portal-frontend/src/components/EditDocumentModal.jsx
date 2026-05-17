@@ -58,8 +58,8 @@ function EditDocumentModal({ isOpen, onClose, document }) {
         setReviewerDropdownOpen(false)
       }
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    window.document.addEventListener('mousedown', handleClickOutside)
+    return () => window.document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
   // Initialize form and selections when modal opens

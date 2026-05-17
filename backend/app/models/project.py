@@ -29,13 +29,13 @@ class Project(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     # Relationships (referenced by string to avoid circular import)
-    members = relationship("ProjectMember", back_populates="project")
-    documents = relationship("Document", back_populates="project")
-    notifications = relationship("Notification", back_populates="project")
-    project_comments = relationship("ProjectComment", back_populates="project", cascade="all, delete-orphan")
+    members = relationship("ProjectMember", back_populates="project", cascade="all, delete-orphan", passive_deletes=True)
+    documents = relationship("Document", back_populates="project", cascade="all, delete-orphan", passive_deletes=True)
+    notifications = relationship("Notification", back_populates="project", cascade="all, delete-orphan", passive_deletes=True)
+    project_comments = relationship("ProjectComment", back_populates="project", cascade="all, delete-orphan", passive_deletes=True)
     creator = relationship("User", back_populates="projects_created", foreign_keys="Project.created_by")
-    kb_chunks = relationship("KBChunk", back_populates="project", cascade="all, delete-orphan")
-    kb_summaries = relationship("KBSummary", back_populates="project", cascade="all, delete-orphan")
+    kb_chunks = relationship("KBChunk", back_populates="project", cascade="all, delete-orphan", passive_deletes=True)
+    kb_summaries = relationship("KBSummary", back_populates="project", cascade="all, delete-orphan", passive_deletes=True)
 
 
 class ProjectRole(str, enum.Enum):

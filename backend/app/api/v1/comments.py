@@ -27,6 +27,22 @@ from app.api.deps import (
 router = APIRouter()
 
 
+def _comment_to_response(comment, user_name: str = None) -> CommentResponse:
+    """Safely build CommentResponse from an ORM Comment, avoiding lazy-load issues"""
+    return CommentResponse(
+        id=str(comment.id),
+        document_id=str(comment.document_id),
+        user_id=str(comment.user_id) if comment.user_id else None,
+        parent_comment_id=str(comment.parent_comment_id) if comment.parent_comment_id else None,
+        content=comment.content,
+        is_resolved=comment.is_resolved,
+        created_at=comment.created_at,
+        updated_at=comment.updated_at,
+        user_name=user_name or (comment.user.full_name if getattr(comment, 'user', None) else "Unknown User"),
+        replies=[],
+    )
+
+
 def extract_mentions(content: str) -> List[str]:
     """Extract @username mentions from comment content"""
     # Match @username or @email patterns
@@ -226,7 +242,7 @@ async def get_comment(
     project_id = str(document.project_id)
     await check_project_access(project_id, current_user=current_user, db=db)
     
-    return CommentResponse.model_validate(comment)
+    return _comment_to_response(comment)
 
 
 @router.put("/{comment_id}", response_model=CommentResponse)
@@ -260,7 +276,7 @@ async def update_comment(
     await db.commit()
     await db.refresh(comment)
     
-    return CommentResponse.model_validate(comment)
+    return _comment_to_response(comment)
 
 
 @router.delete("/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -330,7 +346,7 @@ async def resolve_comment(
     await db.commit()
     await db.refresh(comment)
     
-    return CommentResponse.model_validate(comment)
+    return _comment_to_response(comment)
 
 
 @router.post("/{comment_id}/unresolve", response_model=CommentResponse)
@@ -367,7 +383,7 @@ async def unresolve_comment(
     await db.commit()
     await db.refresh(comment)
     
-    return CommentResponse.model_validate(comment)
+    return _comment_to_response(comment)
 
 
 @router.get("/document/{document_id}/threads", response_model=CommentListResponse)
@@ -408,8 +424,32 @@ async def get_comment_threads(
     
     # Filter to only top-level comments (no parent)
     thread_comments = [c for c in comments if c.parent_comment_id is None]
-    
+
+    # Build all comments indexed by ID for reply lookup
+    all_by_id = {}
+    for c in all_comments:
+        all_by_id[str(c.id)] = c
+
+    # Build response dicts with nested replies
+    def build_comment_dict(c):
+        replies_list = []
+        if hasattr(c, 'replies') and c.replies:
+            for r in c.replies:
+                replies_list.append(build_comment_dict(r))
+        return CommentResponse(
+            id=str(c.id),
+            document_id=str(c.document_id),
+            user_id=str(c.user_id) if c.user_id else None,
+            parent_comment_id=str(c.parent_comment_id) if c.parent_comment_id else None,
+            content=c.content,
+            is_resolved=c.is_resolved,
+            created_at=c.created_at,
+            updated_at=c.updated_at,
+            user_name=c.user.full_name if c.user else "Unknown User",
+            replies=replies_list,
+        )
+
     return CommentListResponse(
-        comments=[CommentResponse.model_validate(c) for c in thread_comments],
+        comments=[build_comment_dict(c) for c in thread_comments],
         total=len(thread_comments)
     )

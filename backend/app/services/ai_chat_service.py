@@ -26,7 +26,7 @@ class ChatContext:
 
 class AIChatService:
     """
-    AI Chat Service that can use OpenAI API or fallback to context-aware responses.
+    AI Chat Service that uses OpenAI API or falls back to context-aware responses.
     """
 
     @classmethod
@@ -57,8 +57,9 @@ class AIChatService:
             print(f"[AI Chat] Using OpenAI API")
             return await cls._chat_with_openai(message, context, history, api_key)
         else:
-            # No fallback - raise error if no API key
-            raise ValueError("OPENAI_API_KEY not configured. Please set it in your .env file.")
+            # Fallback: context-aware rule-based responses when no key configured
+            print(f"[AI Chat] OPENAI_API_KEY not set — using fallback responses")
+            return cls._generate_contextual_response(message, context)
 
     @classmethod
     async def _chat_with_openai(
@@ -95,7 +96,6 @@ class AIChatService:
 
         print(f"[OpenAI] Sending request with {len(messages)} messages...")
 
-        # Call OpenAI API - no fallback, let errors propagate
         response = await client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
@@ -216,9 +216,8 @@ Guidelines:
 
         response += "**Key takeaways:**\n"
 
-        # Extract up to 3 key points
         for i, sentence in enumerate(sentences[:3]):
-            if len(sentence) > 20:  # Only include meaningful sentences
+            if len(sentence) > 20:
                 response += f"- {sentence}.\n"
 
         if context.search_query:

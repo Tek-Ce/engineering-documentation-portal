@@ -150,22 +150,33 @@ async def kb_chat(
             for msg in request.history
         ]
 
-    # Generate AI response
-    response_text = await chat_with_context(
-        message=request.message,
-        document_title=request.document_title,
-        document_id=request.document_id,
-        project_name=request.project_name,
-        chunk_text=request.chunk_text,
-        file_name=request.file_name,
-        search_query=request.search_query,
-        history=history_dicts
-    )
-
-    # Check if OpenAI was used (read at runtime)
     import os
-    used_ai = bool(os.getenv("OPENAI_API_KEY"))
-    print(f"[AI Chat] OpenAI key configured: {used_ai}")
+
+    # Generate AI response
+    try:
+        response_text = await chat_with_context(
+            message=request.message,
+            document_title=request.document_title,
+            document_id=request.document_id,
+            project_name=request.project_name,
+            chunk_text=request.chunk_text,
+            file_name=request.file_name,
+            search_query=request.search_query,
+            history=history_dicts
+        )
+        used_ai = bool(os.getenv("OPENAI_API_KEY"))
+    except Exception as e:
+        print(f"[AI Chat] Error: {e}")
+        error_msg = str(e)
+        if "api_key" in error_msg.lower() or "authentication" in error_msg.lower() or "invalid" in error_msg.lower():
+            response_text = "AI chat is not available: invalid or missing API key. Please contact your administrator."
+        elif "quota" in error_msg.lower() or "billing" in error_msg.lower() or "insufficient" in error_msg.lower():
+            response_text = "AI chat is temporarily unavailable due to API quota limits. Please try again later."
+        elif "rate" in error_msg.lower():
+            response_text = "Too many requests. Please wait a moment and try again."
+        else:
+            response_text = "AI chat is temporarily unavailable. Please try again later."
+        used_ai = False
 
     return AIChatResponse(
         response=response_text,
